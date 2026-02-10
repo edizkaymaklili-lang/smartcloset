@@ -1,12 +1,17 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/enums/clothing_category.dart';
 import '../../domain/entities/clothing_item.dart';
 import '../../../../services/storage_service.dart';
+import '../../../../services/settings_service.dart';
+import '../../../../services/background_removal_service.dart';
 import '../providers/wardrobe_provider.dart';
 import '../../../style_feed/presentation/providers/style_feed_provider.dart';
 
@@ -24,9 +29,11 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
   final _nameController = TextEditingController();
   final _colorController = TextEditingController();
   final _storage = StorageService();
+  final _settingsService = SettingsService();
+  final _backgroundRemovalService = BackgroundRemovalService();
   final _picker = ImagePicker();
 
-  File? _imageFile;
+  dynamic _imageFile; // XFile on web, File on mobile
   ClothingCategory _category = ClothingCategory.tops;
   final Set<String> _seasons = {};
   final Set<String> _occasions = {};
@@ -67,7 +74,123 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
       imageQuality: 85,
     );
     if (picked != null) {
-      setState(() => _imageFile = File(picked.path));
+      // Check if background removal is enabled
+      final bgRemovalEnabled = await _settingsService.getBackgroundRemovalEnabled();
+
+      if (bgRemovalEnabled) {
+        // Show processing dialog
+        if (mounted) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => const AlertDialog(
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Removing background...'),
+                ],
+              ),
+            ),
+          );
+        }
+
+        try {
+          final apiKey = await _settingsService.getRemoveBgApiKey();
+          final processedBytes = await _backgroundRemovalService.removeBackground(
+            imageFile: picked,
+            apiKey: apiKey,
+          );
+
+          if (mounted) Navigator.pop(context); // Close dialog
+
+          if (processedBytes != null) {
+            if (kIsWeb) {
+              // On web, keep the processed bytes and create a new XFile
+              setState(() {
+                _imageFile = XFile.fromData(
+                  processedBytes,
+                  name: 'processed_${picked.name}',
+                  mimeType: 'image/png',
+                );
+              });
+            } else {
+              // On mobile, save to temporary file
+              final tempFile = await _saveProcessedImage(processedBytes);
+              setState(() {
+                _imageFile = tempFile;
+              });
+            }
+
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Background removed successfully!'),
+                  backgroundColor: AppColors.success,
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+          }
+        } catch (e) {
+          if (mounted) {
+            Navigator.pop(context); // Close dialog
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to remove background: ${e.toString()}'),
+                backgroundColor: AppColors.error,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+          // Use original image if background removal fails
+          setState(() {
+            _imageFile = kIsWeb ? picked : File(picked.path);
+          });
+        }
+      } else {
+        // No background removal, use original image
+        setState(() {
+          _imageFile = kIsWeb ? picked : File(picked.path);
+        });
+      }
+    }
+  }
+
+  Future<File> _saveProcessedImage(Uint8List bytes) async {
+    final tempDir = await getApplicationDocumentsDirectory();
+    final tempFile = File('${tempDir.path}/temp_${DateTime.now().millisecondsSinceEpoch}.png');
+    await tempFile.writeAsBytes(bytes);
+    return tempFile;
+  }
+
+  Widget _buildImagePreview() {
+    if (_imageFile == null) return const SizedBox.shrink();
+
+    if (kIsWeb) {
+      // Web: _imageFile is XFile
+      final xFile = _imageFile as XFile;
+      return FutureBuilder<Uint8List>(
+        future: xFile.readAsBytes(),
+        builder: (context, snapshot) {
+          if (snapshot.hasData) {
+            return Image.memory(
+              snapshot.data!,
+              fit: BoxFit.cover,
+              width: double.infinity,
+            );
+          }
+          return const Center(child: CircularProgressIndicator());
+        },
+      );
+    } else {
+      // Mobile: _imageFile is File
+      return Image.file(
+        _imageFile as File,
+        fit: BoxFit.cover,
+        width: double.infinity,
+      );
     }
   }
 
@@ -231,11 +354,7 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
                 child: _imageFile != null
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(16),
-                        child: Image.file(
-                          _imageFile!,
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                        ),
+                        child: _buildImagePreview(),
                       )
                     : Column(
                         mainAxisAlignment: MainAxisAlignment.center,

@@ -6,6 +6,8 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/profile_provider.dart';
 import '../../../../services/notification_service.dart';
+import '../../../../services/settings_service.dart';
+import '../../../../services/background_removal_service.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -15,9 +17,14 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  final _settingsService = SettingsService();
+  final _backgroundRemovalService = BackgroundRemovalService();
+
   bool _notificationsEnabled = true;
   bool _locationEnabled = true;
   bool _darkMode = false;
+  bool _backgroundRemovalEnabled = false;
+  String _removeBgApiKey = '';
   String _appVersion = '';
 
   @override
@@ -36,18 +43,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  void _loadSettings() {
-    // TODO: Load from SharedPreferences
-    setState(() {
-      _notificationsEnabled = true;
-      _locationEnabled = true;
-      _darkMode = false;
-    });
+  Future<void> _loadSettings() async {
+    final notifications = await _settingsService.getNotificationsEnabled();
+    final location = await _settingsService.getLocationEnabled();
+    final darkMode = await _settingsService.getDarkMode();
+    final bgRemoval = await _settingsService.getBackgroundRemovalEnabled();
+    final apiKey = await _settingsService.getRemoveBgApiKey();
+
+    if (mounted) {
+      setState(() {
+        _notificationsEnabled = notifications;
+        _locationEnabled = location;
+        _darkMode = darkMode;
+        _backgroundRemovalEnabled = bgRemoval;
+        _removeBgApiKey = apiKey;
+      });
+    }
   }
 
   Future<void> _toggleNotifications(bool value) async {
     setState(() => _notificationsEnabled = value);
-    // TODO: Save to SharedPreferences
+    await _settingsService.setNotificationsEnabled(value);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -62,12 +78,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _toggleLocation(bool value) async {
     setState(() => _locationEnabled = value);
-    // TODO: Save to SharedPreferences
+    await _settingsService.setLocationEnabled(value);
   }
 
   Future<void> _toggleDarkMode(bool value) async {
     setState(() => _darkMode = value);
-    // TODO: Save to SharedPreferences and apply theme
+    await _settingsService.setDarkMode(value);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -76,6 +92,131 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _toggleBackgroundRemoval(bool value) async {
+    // If enabling, check if API key is set
+    if (value && _removeBgApiKey.isEmpty) {
+      _showApiKeyDialog();
+      return;
+    }
+
+    setState(() => _backgroundRemovalEnabled = value);
+    await _settingsService.setBackgroundRemovalEnabled(value);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(value
+              ? 'Background removal enabled'
+              : 'Background removal disabled'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _showApiKeyDialog() async {
+    final controller = TextEditingController(text: _removeBgApiKey);
+    bool isValidating = false;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Remove.bg API Key'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'To enable automatic background removal, you need a remove.bg API key.',
+                style: TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Get your free API key (50 images/month):',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                '1. Visit remove.bg/users/sign_up\n2. Sign up for free\n3. Get API key from remove.bg/api',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                decoration: const InputDecoration(
+                  labelText: 'API Key',
+                  border: OutlineInputBorder(),
+                  hintText: 'Paste your API key here',
+                ),
+                maxLines: 2,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: isValidating
+                  ? null
+                  : () async {
+                      final apiKey = controller.text.trim();
+                      if (apiKey.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Please enter an API key'),
+                            backgroundColor: AppColors.error,
+                          ),
+                        );
+                        return;
+                      }
+
+                      // Validate API key
+                      setDialogState(() => isValidating = true);
+                      final isValid = await _backgroundRemovalService.validateApiKey(apiKey);
+                      setDialogState(() => isValidating = false);
+
+                      if (!context.mounted) return;
+
+                      if (isValid) {
+                        await _settingsService.setRemoveBgApiKey(apiKey);
+                        setState(() {
+                          _removeBgApiKey = apiKey;
+                          _backgroundRemovalEnabled = true;
+                        });
+                        await _settingsService.setBackgroundRemovalEnabled(true);
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('API key validated successfully!'),
+                            backgroundColor: AppColors.success,
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Invalid API key. Please check and try again.'),
+                            backgroundColor: AppColors.error,
+                          ),
+                        );
+                      }
+                    },
+              child: isValidating
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _showLogoutConfirmation() async {
@@ -206,6 +347,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             activeThumbColor: AppColors.primary,
             onChanged: _toggleDarkMode,
           ),
+          SwitchListTile(
+            secondary: const Icon(Icons.auto_fix_high_outlined),
+            title: const Text('Auto Background Removal'),
+            subtitle: Text(_removeBgApiKey.isEmpty
+                ? 'Tap to set API key'
+                : 'Remove backgrounds from wardrobe photos'),
+            value: _backgroundRemovalEnabled,
+            activeTrackColor: AppColors.primary.withValues(alpha: 0.5),
+            activeThumbColor: AppColors.primary,
+            onChanged: _toggleBackgroundRemoval,
+          ),
+          if (_removeBgApiKey.isNotEmpty)
+            _SettingsTile(
+              icon: Icons.key_outlined,
+              title: 'Remove.bg API Key',
+              subtitle: '${_removeBgApiKey.substring(0, 8)}...',
+              onTap: _showApiKeyDialog,
+            ),
 
           const Divider(height: 32),
 
