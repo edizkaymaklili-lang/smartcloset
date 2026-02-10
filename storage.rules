@@ -28,7 +28,7 @@ service firebase.storage {
     }
 
     // Wardrobe item images - users can only manage their own
-    match /wardrobe/{userId}/{itemId}/{fileName} {
+    match /wardrobe/{userId}/{allPaths=**} {
       allow read: if isAuthenticated() && request.auth.uid == userId;
       allow write: if isAuthenticated()
                    && request.auth.uid == userId
@@ -37,8 +37,17 @@ service firebase.storage {
     }
 
     // Outfit images - users can only manage their own
-    match /outfits/{userId}/{outfitId}/{fileName} {
+    match /outfits/{userId}/{allPaths=**} {
       allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow write: if isAuthenticated()
+                   && request.auth.uid == userId
+                   && isImage()
+                   && isValidSize();
+    }
+
+    // Style Feed post images - anyone authenticated can read, only owner can write
+    match /posts/{userId}/{allPaths=**} {
+      allow read: if isAuthenticated();
       allow write: if isAuthenticated()
                    && request.auth.uid == userId
                    && isImage()
