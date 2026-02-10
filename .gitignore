@@ -1,0 +1,26 @@
+# Flutter
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# IDE  
+.idea/
+*.iml
+.vscode/
+
+# Node
+node_modules/
+package-lock.json
+
+# OS
+.DS_Store
+Thumbs.db
+nul
+
+# Firebase
+.firebase/
+
+# Claude
+.claude/sessions/

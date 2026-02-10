@@ -1,0 +1,127 @@
+/// World major cities organized by region
+class WorldCities {
+  static const Map<String, List<String>> citiesByRegion = {
+    'Europe': [
+      'London',
+      'Paris',
+      'Berlin',
+      'Rome',
+      'Madrid',
+      'Amsterdam',
+      'Vienna',
+      'Prague',
+      'Istanbul',
+      'Athens',
+      'Barcelona',
+      'Stockholm',
+      'Copenhagen',
+      'Oslo',
+      'Helsinki',
+      'Warsaw',
+      'Budapest',
+      'Lisbon',
+      'Dublin',
+      'Brussels',
+    ],
+    'North America': [
+      'New York',
+      'Los Angeles',
+      'Chicago',
+      'Houston',
+      'Miami',
+      'San Francisco',
+      'Seattle',
+      'Boston',
+      'Toronto',
+      'Vancouver',
+      'Montreal',
+      'Mexico City',
+      'Guadalajara',
+      'Monterrey',
+    ],
+    'Asia': [
+      'Tokyo',
+      'Seoul',
+      'Beijing',
+      'Shanghai',
+      'Hong Kong',
+      'Singapore',
+      'Bangkok',
+      'Dubai',
+      'Mumbai',
+      'Delhi',
+      'Bangalore',
+      'Jakarta',
+      'Manila',
+      'Kuala Lumpur',
+      'Taipei',
+      'Ho Chi Minh City',
+      'Hanoi',
+      'Riyadh',
+      'Tel Aviv',
+      'Ankara',
+      'Izmir',
+    ],
+    'South America': [
+      'São Paulo',
+      'Rio de Janeiro',
+      'Buenos Aires',
+      'Lima',
+      'Bogotá',
+      'Santiago',
+      'Caracas',
+      'Montevideo',
+    ],
+    'Africa': [
+      'Cairo',
+      'Lagos',
+      'Johannesburg',
+      'Nairobi',
+      'Casablanca',
+      'Cape Town',
+      'Accra',
+      'Addis Ababa',
+    ],
+    'Oceania': [
+      'Sydney',
+      'Melbourne',
+      'Brisbane',
+      'Perth',
+      'Auckland',
+      'Wellington',
+    ],
+  };
+
+  /// Get all cities as a flat list
+  static List<String> get allCities {
+    final cities = <String>[];
+    citiesByRegion.forEach((region, cityList) {
+      cities.addAll(cityList);
+    });
+    return cities..sort();
+  }
+
+  /// Get popular cities (most commonly used)
+  static List<String> get popularCities => [
+    'New York',
+    'London',
+    'Paris',
+    'Tokyo',
+    'Dubai',
+    'Singapore',
+    'Hong Kong',
+    'Los Angeles',
+    'Istanbul',
+    'Berlin',
+    'Sydney',
+    'Toronto',
+    'Mumbai',
+    'Seoul',
+    'Barcelona',
+    'Amsterdam',
+    'Bangkok',
+    'Rome',
+    'San Francisco',
+    'Madrid',
+  ];
+}

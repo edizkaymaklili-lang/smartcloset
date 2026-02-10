@@ -1,0 +1,477 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import '../../../../core/constants/app_colors.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../providers/profile_provider.dart';
+import '../../../../services/notification_service.dart';
+
+class SettingsScreen extends ConsumerStatefulWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  bool _notificationsEnabled = true;
+  bool _locationEnabled = true;
+  bool _darkMode = false;
+  String _appVersion = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAppVersion();
+    _loadSettings();
+  }
+
+  Future<void> _loadAppVersion() async {
+    final packageInfo = await PackageInfo.fromPlatform();
+    if (mounted) {
+      setState(() {
+        _appVersion = '${packageInfo.version} (${packageInfo.buildNumber})';
+      });
+    }
+  }
+
+  void _loadSettings() {
+    // TODO: Load from SharedPreferences
+    setState(() {
+      _notificationsEnabled = true;
+      _locationEnabled = true;
+      _darkMode = false;
+    });
+  }
+
+  Future<void> _toggleNotifications(bool value) async {
+    setState(() => _notificationsEnabled = value);
+    // TODO: Save to SharedPreferences
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(value
+              ? 'Notifications enabled'
+              : 'Notifications disabled'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _toggleLocation(bool value) async {
+    setState(() => _locationEnabled = value);
+    // TODO: Save to SharedPreferences
+  }
+
+  Future<void> _toggleDarkMode(bool value) async {
+    setState(() => _darkMode = value);
+    // TODO: Save to SharedPreferences and apply theme
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Dark mode coming soon!'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _showLogoutConfirmation() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await ref.read(authProvider.notifier).signOut();
+      if (mounted) {
+        context.go('/login');
+      }
+    }
+  }
+
+  Future<void> _clearCache() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear Cache'),
+        content: const Text(
+            'This will clear all cached images and data. Continue?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      // TODO: Implement cache clearing
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cache cleared successfully'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
+    final profile = ref.watch(profileProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Settings'),
+        elevation: 0,
+      ),
+      body: ListView(
+        children: [
+          // Account Section
+          _SectionHeader(title: 'Account'),
+          _SettingsTile(
+            icon: Icons.person_outline,
+            title: 'Display Name',
+            subtitle: profile.displayName,
+            onTap: () => _showEditDisplayName(),
+          ),
+          _SettingsTile(
+            icon: Icons.email_outlined,
+            title: 'Email',
+            subtitle: authState.email ?? 'Not set',
+            trailing: authState.email != null
+                ? const Icon(Icons.verified, size: 20, color: AppColors.success)
+                : null,
+          ),
+          _SettingsTile(
+            icon: Icons.location_city_outlined,
+            title: 'City',
+            subtitle: profile.city,
+            onTap: () {
+              // Navigate back to profile to edit city
+              Navigator.pop(context);
+            },
+          ),
+
+          const Divider(height: 32),
+
+          // Preferences Section
+          _SectionHeader(title: 'Preferences'),
+          SwitchListTile(
+            secondary: const Icon(Icons.notifications_outlined),
+            title: const Text('Notifications'),
+            subtitle: const Text('Daily outfit recommendations'),
+            value: _notificationsEnabled,
+            activeTrackColor: AppColors.primary.withValues(alpha: 0.5),
+            activeThumbColor: AppColors.primary,
+            onChanged: _toggleNotifications,
+          ),
+          SwitchListTile(
+            secondary: const Icon(Icons.location_on_outlined),
+            title: const Text('Location Services'),
+            subtitle: const Text('For weather and nearby features'),
+            value: _locationEnabled,
+            activeTrackColor: AppColors.primary.withValues(alpha: 0.5),
+            activeThumbColor: AppColors.primary,
+            onChanged: _toggleLocation,
+          ),
+          SwitchListTile(
+            secondary: const Icon(Icons.dark_mode_outlined),
+            title: const Text('Dark Mode'),
+            subtitle: const Text('Use dark theme'),
+            value: _darkMode,
+            activeTrackColor: AppColors.primary.withValues(alpha: 0.5),
+            activeThumbColor: AppColors.primary,
+            onChanged: _toggleDarkMode,
+          ),
+
+          const Divider(height: 32),
+
+          // Privacy & Data Section
+          _SectionHeader(title: 'Privacy & Data'),
+          _SettingsTile(
+            icon: Icons.privacy_tip_outlined,
+            title: 'Privacy Policy',
+            onTap: () => _showPrivacyPolicy(),
+          ),
+          _SettingsTile(
+            icon: Icons.description_outlined,
+            title: 'Terms of Service',
+            onTap: () => _showTermsOfService(),
+          ),
+          _SettingsTile(
+            icon: Icons.delete_outline,
+            title: 'Clear Cache',
+            subtitle: 'Free up storage space',
+            onTap: _clearCache,
+          ),
+
+          const Divider(height: 32),
+
+          // About Section
+          _SectionHeader(title: 'About'),
+          _SettingsTile(
+            icon: Icons.info_outline,
+            title: 'App Version',
+            subtitle: _appVersion.isEmpty ? 'Loading...' : _appVersion,
+          ),
+          _SettingsTile(
+            icon: Icons.help_outline,
+            title: 'Help & Support',
+            onTap: () => _showHelpSupport(),
+          ),
+          _SettingsTile(
+            icon: Icons.star_outline,
+            title: 'Rate Us',
+            onTap: () => _rateApp(),
+          ),
+
+          const Divider(height: 32),
+
+          // Logout
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: ElevatedButton(
+              onPressed: _showLogoutConfirmation,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.error,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                'Logout',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  void _showEditDisplayName() {
+    final controller = TextEditingController(
+      text: ref.read(profileProvider).displayName,
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Display Name'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Display Name',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              final newName = controller.text.trim();
+              if (newName.isNotEmpty) {
+                ref.read(profileProvider.notifier).updateDisplayName(newName);
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Name updated to $newName')),
+                );
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPrivacyPolicy() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Privacy Policy'),
+        content: const SingleChildScrollView(
+          child: Text(
+            'Your privacy is important to us. This app collects minimal data:\n\n'
+            '• Account information (email, display name)\n'
+            '• Wardrobe items you add\n'
+            '• Location data (only when you grant permission)\n'
+            '• Usage analytics to improve the app\n\n'
+            'We never share your personal data with third parties without your consent.',
+            style: TextStyle(fontSize: 14),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showTermsOfService() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Terms of Service'),
+        content: const SingleChildScrollView(
+          child: Text(
+            'By using Stil Asist, you agree to:\n\n'
+            '• Use the app for personal, non-commercial purposes\n'
+            '• Provide accurate information\n'
+            '• Not misuse or abuse the service\n'
+            '• Respect other users\' content and privacy\n\n'
+            'We reserve the right to terminate accounts that violate these terms.',
+            style: TextStyle(fontSize: 14),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showHelpSupport() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Help & Support'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Need help? Contact us:', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            _HelpItem(icon: Icons.email, text: 'support@stilasist.com'),
+            const SizedBox(height: 8),
+            _HelpItem(icon: Icons.language, text: 'www.stilasist.com'),
+            const SizedBox(height: 8),
+            _HelpItem(icon: Icons.help_outline, text: 'FAQ & Documentation'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _rateApp() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Thank you for your support! Rating feature coming soon.'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+
+  const _SectionHeader({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: AppColors.primary,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final VoidCallback? onTap;
+  final Widget? trailing;
+
+  const _SettingsTile({
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    this.onTap,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon, color: AppColors.textSecondary),
+      title: Text(title),
+      subtitle: subtitle != null ? Text(subtitle!) : null,
+      trailing: trailing ?? (onTap != null ? const Icon(Icons.chevron_right) : null),
+      onTap: onTap,
+    );
+  }
+}
+
+class _HelpItem extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _HelpItem({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: AppColors.primary),
+        const SizedBox(width: 8),
+        Text(text, style: const TextStyle(fontSize: 14)),
+      ],
+    );
+  }
+}
