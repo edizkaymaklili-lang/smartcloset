@@ -35,8 +35,8 @@ void main() async {
       );
       firebaseReady = true;
 
-      // Initialize Crashlytics if Firebase is available
-      if (firebaseReady) {
+      // Initialize Crashlytics if Firebase is available (mobile/desktop only, not web)
+      if (firebaseReady && !kIsWeb) {
         // Pass all uncaught Flutter errors to Crashlytics
         FlutterError.onError = (errorDetails) {
           FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
@@ -66,10 +66,13 @@ void main() async {
     );
   }, (error, stack) {
     // Catch errors that occur outside of Flutter
-    try {
-      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-    } catch (_) {
-      // Crashlytics not available, error already logged by AppErrorHandler
+    // Only use Crashlytics on non-web platforms
+    if (!kIsWeb) {
+      try {
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      } catch (_) {
+        // Crashlytics not available, error already logged by AppErrorHandler
+      }
     }
   });
 }

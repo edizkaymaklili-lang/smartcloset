@@ -1,5 +1,6 @@
+import 'dart:ui' show PlatformDispatcher;
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show DiagnosticsNode, FlutterError, FlutterErrorDetails, debugPrint, kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 
@@ -42,15 +43,17 @@ class AppErrorHandler {
       debugPrint('═══════════════════════════════════════════');
     }
 
-    // Send to Firebase Crashlytics
-    try {
-      FirebaseCrashlytics.instance.recordError(
-        error,
-        stackTrace,
-        reason: context?.toString(),
-      );
-    } catch (_) {
-      // Crashlytics not available, already logged to console
+    // Send to Firebase Crashlytics (mobile/desktop only, not web)
+    if (!kIsWeb) {
+      try {
+        FirebaseCrashlytics.instance.recordError(
+          error,
+          stackTrace,
+          reason: context?.toString(),
+        );
+      } catch (_) {
+        // Crashlytics not available, already logged to console
+      }
     }
   }
 }
