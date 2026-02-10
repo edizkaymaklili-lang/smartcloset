@@ -1,0 +1,42 @@
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "storage": [
+    {
+      "bucket": "smartcloset-95789.firebasestorage.app",
+      "rules": "storage.rules"
+    }
+  ],
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "*.local"
+      ]
+    }
+  ],
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "smartcloset-95789",
+          "appId": "1:203315352795:android:024fe14b6ffac7f60268fe",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "smartcloset-95789",
+          "configurations": {
+            "android": "1:203315352795:android:024fe14b6ffac7f60268fe"
+          }
+        }
+      }
+    }
+  }
+}
