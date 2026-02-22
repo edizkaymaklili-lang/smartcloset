@@ -9,9 +9,13 @@ class WardrobeMatcher {
     required List<ClothingItem> wardrobe,
     required String occasion,
     required String weatherSuitability,
+    required String currentSeason,
+    Set<String> excludeItemIds = const {},
   }) {
-    // Filter candidates by category
-    final candidates = wardrobe.where((c) => c.category == generic.category).toList();
+    // Filter candidates by category and exclude already used items
+    final candidates = wardrobe
+        .where((c) => c.category == generic.category && !excludeItemIds.contains(c.id))
+        .toList();
     if (candidates.isEmpty) return generic;
 
     // Score each candidate
@@ -19,6 +23,9 @@ class WardrobeMatcher {
       int score = 0;
       if (c.occasions.contains(occasion)) score += 3;
       if (c.weatherSuitability.contains(weatherSuitability)) score += 2;
+      if (c.seasons.contains(currentSeason)) score += 3;
+      // Penalize items not suitable for current season
+      if (c.seasons.isNotEmpty && !c.seasons.contains(currentSeason)) score -= 2;
       if (c.isFavorite) score += 1;
       // Prefer items not worn recently
       if (c.lastWorn == null) {
@@ -48,6 +55,8 @@ class WardrobeMatcher {
     required List<ClothingItem> wardrobe,
     required String occasion,
     required String weatherSuitability,
+    required String currentSeason,
+    Set<String> excludeItemIds = const {},
   }) {
     final matchedItems = outfit.items.map((item) {
       return matchItem(
@@ -55,6 +64,8 @@ class WardrobeMatcher {
         wardrobe: wardrobe,
         occasion: occasion,
         weatherSuitability: weatherSuitability,
+        currentSeason: currentSeason,
+        excludeItemIds: excludeItemIds,
       );
     }).toList();
 

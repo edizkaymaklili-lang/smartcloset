@@ -27,10 +27,14 @@ class ProfileNotifier extends Notifier<UserProfile> {
   static const _keyWorkType = 'work_type';
   static const _keyHobbies = 'hobbies';
   static const _keyColorSeason = 'color_season';
+  static const _keyAvatarPath = 'avatar_path';
 
   @override
   UserProfile build() {
     final prefs = ref.read(sharedPreferencesProvider);
+
+    final savedCity = prefs.getString(_keyCity);
+
     return UserProfile(
       displayName: prefs.getString(_keyName) ?? 'Style Enthusiast',
       age: 25,
@@ -39,13 +43,14 @@ class ProfileNotifier extends Notifier<UserProfile> {
         orElse: () => StylePreference.classic,
       ),
       workStatus: 'working',
-      city: prefs.getString(_keyCity) ?? 'Istanbul',
+      city: savedCity ?? 'Istanbul',
       notificationEnabled: prefs.getBool('notification_enabled') ?? true,
       bodyType: _loadEnum(prefs, _keyBodyType, BodyType.values),
       heightRange: _loadEnum(prefs, _keyHeightRange, HeightRange.values),
       workType: _loadEnum(prefs, _keyWorkType, WorkType.values),
       hobbies: _loadHobbies(prefs),
       colorSeason: _loadEnum(prefs, _keyColorSeason, ColorSeason.values),
+      avatarPath: prefs.getString(_keyAvatarPath),
     );
   }
 
@@ -119,6 +124,11 @@ class ProfileNotifier extends Notifier<UserProfile> {
   void updateColorSeason(ColorSeason colorSeason) {
     ref.read(sharedPreferencesProvider).setString(_keyColorSeason, colorSeason.name);
     state = state.copyWith(colorSeason: colorSeason);
+  }
+
+  void updateAvatar(String path) {
+    ref.read(sharedPreferencesProvider).setString(_keyAvatarPath, path);
+    state = state.copyWith(avatarPath: path);
   }
 
   Future<void> toggleNotifications(bool enabled) async {

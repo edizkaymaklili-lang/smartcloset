@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/enums/body_type.dart';
@@ -7,22 +8,24 @@ import '../../../../core/enums/height_range.dart';
 import '../../../../core/enums/style_preference.dart';
 import '../../../../core/enums/user_hobby.dart';
 import '../../../../core/enums/work_type.dart';
+import '../../../profile/presentation/providers/profile_provider.dart';
 
-class OnboardingScreen extends StatefulWidget {
+class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
   @override
-  State<OnboardingScreen> createState() => _OnboardingScreenState();
+  ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen> {
+class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final PageController _pageController = PageController();
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _cityController = TextEditingController();
   int _currentPage = 0;
   static const _totalPages = 6;
 
   // Page 1: Style
   StylePreference _selectedStyle = StylePreference.classic;
-  // Page 2: About You (existing)
   // Page 3: Body Type & Height
   BodyType? _selectedBodyType;
   HeightRange? _selectedHeightRange;
@@ -36,7 +39,26 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   void dispose() {
     _pageController.dispose();
+    _nameController.dispose();
+    _cityController.dispose();
     super.dispose();
+  }
+
+  void _saveAndFinish() {
+    final notifier = ref.read(profileProvider.notifier);
+    final name = _nameController.text.trim();
+    final city = _cityController.text.trim();
+
+    notifier.updateStylePreference(_selectedStyle);
+    if (name.isNotEmpty) notifier.updateName(name);
+    if (city.isNotEmpty) notifier.updateCity(city);
+    if (_selectedBodyType != null) notifier.updateBodyType(_selectedBodyType!);
+    if (_selectedHeightRange != null) notifier.updateHeightRange(_selectedHeightRange!);
+    if (_selectedWorkType != null) notifier.updateWorkType(_selectedWorkType!);
+    if (_selectedHobbies.isNotEmpty) notifier.updateHobbies(_selectedHobbies.toList());
+    if (_selectedColorSeason != null) notifier.updateColorSeason(_selectedColorSeason!);
+    notifier.completeOnboarding();
+    context.go('/recommendations');
   }
 
   void _nextPage() {
@@ -46,7 +68,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         curve: Curves.easeInOut,
       );
     } else {
-      context.go('/recommendations');
+      _saveAndFinish();
     }
   }
 
@@ -103,7 +125,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     selectedStyle: _selectedStyle,
                     onStyleSelected: (s) => setState(() => _selectedStyle = s),
                   ),
-                  const _AboutYouPage(),
+                  _AboutYouPage(
+                    nameController: _nameController,
+                    cityController: _cityController,
+                  ),
                   _BodyTypePage(
                     selectedBodyType: _selectedBodyType,
                     selectedHeightRange: _selectedHeightRange,
@@ -246,7 +271,13 @@ class _StyleSelectionPage extends StatelessWidget {
 // ─────────────────── Page 2: About You ───────────────────
 
 class _AboutYouPage extends StatelessWidget {
-  const _AboutYouPage();
+  final TextEditingController nameController;
+  final TextEditingController cityController;
+
+  const _AboutYouPage({
+    required this.nameController,
+    required this.cityController,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -257,31 +288,36 @@ class _AboutYouPage extends StatelessWidget {
         children: [
           const SizedBox(height: 16),
           Text(
-            'Hakkında',
+            'About You',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Önerilerimizi kişiselleştirmemize yardımcı ol.',
+            'Help us personalize your recommendations.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: AppColors.textSecondary,
             ),
           ),
           const SizedBox(height: 32),
-          const TextField(
-            decoration: InputDecoration(
-              labelText: 'Adın',
+          TextField(
+            controller: nameController,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(
+              labelText: 'Your Name',
               prefixIcon: Icon(Icons.person_outline),
+              hintText: 'e.g. Ayşe',
             ),
           ),
           const SizedBox(height: 16),
-          const TextField(
-            decoration: InputDecoration(
-              labelText: 'Şehir',
+          TextField(
+            controller: cityController,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(
+              labelText: 'City',
               prefixIcon: Icon(Icons.location_city_outlined),
-              hintText: 'ör. İstanbul, Ankara, İzmir',
+              hintText: 'e.g. Istanbul, Ankara, Izmir',
             ),
           ),
         ],

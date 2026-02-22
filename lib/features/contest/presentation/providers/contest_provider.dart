@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/enums/weather_condition.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../profile/presentation/providers/profile_provider.dart';
 import '../../../weather/presentation/providers/weather_provider.dart';
-import '../../data/contest_mock_datasource.dart';
+import '../../data/contest_repository.dart';
 import '../../domain/entities/contest_entry.dart';
 
 // ── Weather theme label ──────────────────────────────────────────────────────
@@ -17,15 +19,9 @@ String _weatherTheme(WeatherClass? wc) => switch (wc) {
       null => 'Daily Style 👗',
     };
 
-// ── Device user identity (no auth needed for mock) ──────────────────────────
-final deviceUserIdProvider = Provider<String>((ref) {
-  final prefs = ref.read(sharedPreferencesProvider);
-  var id = prefs.getString('device_user_id');
-  if (id == null) {
-    id = const Uuid().v4();
-    prefs.setString('device_user_id', id);
-  }
-  return id;
+// ── Contest repository provider ──────────────────────────────────────────────
+final contestRepositoryProvider = Provider<ContestRepository>((ref) {
+  return ContestRepository();
 });
 
 // ── Current weather theme ───────────────────────────────────────────────────
@@ -33,7 +29,6 @@ final contestThemeProvider = Provider<String>((ref) {
   final weatherAsync = ref.watch(weatherProvider);
   return weatherAsync.when(
     data: (w) {
-      // Simple classify inline
       WeatherClass wc;
       if (w.precipitation > 2) {
         wc = WeatherClass.rainy;
@@ -51,7 +46,7 @@ final contestThemeProvider = Provider<String>((ref) {
       return _weatherTheme(wc);
     },
     loading: () => 'Daily Style 👗',
-    error: (_, st) => 'Daily Style 👗',
+    error: (_, _) => 'Daily Style 👗',
   );
 });
 
@@ -61,12 +56,14 @@ class ContestState {
   final ContestEntry? yesterdayWinner;
   final Set<String> votedIds;
   final bool isSubmitting;
+  final String? contestId;
 
   const ContestState({
     this.entries = const [],
     this.yesterdayWinner,
     this.votedIds = const {},
     this.isSubmitting = false,
+    this.contestId,
   });
 
   ContestState copyWith({
@@ -74,12 +71,14 @@ class ContestState {
     ContestEntry? yesterdayWinner,
     Set<String>? votedIds,
     bool? isSubmitting,
+    String? contestId,
   }) {
     return ContestState(
       entries: entries ?? this.entries,
       yesterdayWinner: yesterdayWinner ?? this.yesterdayWinner,
       votedIds: votedIds ?? this.votedIds,
       isSubmitting: isSubmitting ?? this.isSubmitting,
+      contestId: contestId ?? this.contestId,
     );
   }
 }
@@ -90,37 +89,68 @@ final contestProvider = NotifierProvider<ContestNotifier, ContestState>(() {
 
 class ContestNotifier extends Notifier<ContestState> {
   static const _keyVotedEntries = 'voted_contest_entries';
+  StreamSubscription<List<ContestEntry>>? _entriesSubscription;
 
   @override
   ContestState build() {
     final theme = ref.watch(contestThemeProvider);
+
+    // Load voted IDs from local storage for fast initial state
     final prefs = ref.read(sharedPreferencesProvider);
-    final votedList = prefs.getStringList(_keyVotedEntries) ?? [];
-    final votedSet = Set<String>.from(votedList);
-
-    final entries = ContestMockDatasource.getTodayEntries(theme)
-        .map((e) => e.copyWith(isVotedByMe: votedSet.contains(e.id)))
-        .toList();
-
-    return ContestState(
-      entries: entries,
-      yesterdayWinner: ContestMockDatasource.getYesterdayWinner(),
-      votedIds: votedSet,
+    final votedSet = Set<String>.from(
+      prefs.getStringList(_keyVotedEntries) ?? [],
     );
+
+    // Clean up stream on rebuild/dispose
+    ref.onDispose(() => _entriesSubscription?.cancel());
+
+    // Kick off async Firestore load
+    _loadAsync(theme, votedSet);
+
+    return ContestState(votedIds: votedSet);
   }
 
-  void toggleVote(String entryId) {
-    final prefs = ref.read(sharedPreferencesProvider);
-    final votedSet = Set<String>.from(state.votedIds);
+  Future<void> _loadAsync(String theme, Set<String> initialVotedIds) async {
+    final repo = ref.read(contestRepositoryProvider);
+    try {
+      final contestId = await repo.getOrCreateTodayContest(theme);
+      state = state.copyWith(contestId: contestId);
 
-    final isVoted = votedSet.contains(entryId);
-    if (isVoted) {
-      votedSet.remove(entryId);
-    } else {
-      votedSet.add(entryId);
+      // Load yesterday's winner
+      final winner = await repo.getYesterdayWinner();
+      if (winner != null) {
+        state = state.copyWith(yesterdayWinner: winner);
+      }
+
+      // Subscribe to live entries stream
+      _entriesSubscription?.cancel();
+      _entriesSubscription =
+          repo.getEntriesStream(contestId).listen((entries) {
+        final updatedEntries = entries
+            .map((e) => e.copyWith(isVotedByMe: state.votedIds.contains(e.id)))
+            .toList();
+        state = state.copyWith(entries: updatedEntries);
+      });
+    } catch (_) {
+      // Firebase not ready — entries stay empty, will retry on next build
     }
+  }
 
-    prefs.setStringList(_keyVotedEntries, votedSet.toList());
+  Future<void> toggleVote(String entryId) async {
+    final userId = ref.read(authProvider).userId;
+    if (userId == null) return;
+
+    final prefs = ref.read(sharedPreferencesProvider);
+    final isVoted = state.votedIds.contains(entryId);
+
+    // Optimistic UI update
+    final newVotedIds = Set<String>.from(state.votedIds);
+    if (isVoted) {
+      newVotedIds.remove(entryId);
+    } else {
+      newVotedIds.add(entryId);
+    }
+    prefs.setStringList(_keyVotedEntries, newVotedIds.toList());
 
     final updatedEntries = state.entries.map((e) {
       if (e.id != entryId) return e;
@@ -129,32 +159,66 @@ class ContestNotifier extends Notifier<ContestState> {
         isVotedByMe: !isVoted,
       );
     }).toList();
+    state = state.copyWith(entries: updatedEntries, votedIds: newVotedIds);
 
-    state = state.copyWith(entries: updatedEntries, votedIds: votedSet);
+    // Firestore update (best-effort — optimistic update already applied)
+    final contestId = state.contestId;
+    if (contestId == null) return;
+    try {
+      await ref.read(contestRepositoryProvider).toggleVote(
+            contestId: contestId,
+            entryId: entryId,
+            userId: userId,
+          );
+    } catch (_) {
+      // Network error — local state remains as-is
+    }
   }
 
-  void submitEntry({
+  Future<void> submitEntry({
     required String displayName,
     required String city,
     required String? photoPath,
     required String? description,
-  }) {
-    final deviceId = ref.read(deviceUserIdProvider);
+  }) async {
+    final userId = ref.read(authProvider).userId;
     final theme = ref.read(contestThemeProvider);
+    final contestId = state.contestId;
+
+    state = state.copyWith(isSubmitting: true);
 
     final newEntry = ContestEntry(
       id: const Uuid().v4(),
-      userId: deviceId,
+      userId: userId ?? 'anonymous',
       userDisplayName: displayName,
       userCity: city,
       photoPath: photoPath,
-      date: ContestMockDatasource.todayDate(),
+      date: contestId ?? _todayDate(),
       weatherTheme: theme,
       description: description,
       voteCount: 0,
       createdAt: DateTime.now(),
     );
 
-    state = state.copyWith(entries: [...state.entries, newEntry]);
+    try {
+      if (contestId != null) {
+        await ref.read(contestRepositoryProvider).submitEntry(
+              contestId: contestId,
+              entry: newEntry,
+            );
+      }
+      // Optimistic local add (stream will confirm)
+      state = state.copyWith(
+        entries: [...state.entries, newEntry],
+        isSubmitting: false,
+      );
+    } catch (_) {
+      state = state.copyWith(isSubmitting: false);
+    }
+  }
+
+  static String _todayDate() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
   }
 }

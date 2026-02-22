@@ -5,18 +5,11 @@ import '../../../profile/presentation/providers/profile_provider.dart';
 import '../../../wardrobe/presentation/providers/wardrobe_provider.dart';
 import '../../engine/recommendation_engine.dart';
 import '../../domain/entities/outfit_recommendation.dart';
-import '../../../../main.dart' show firebaseAvailableProvider;
-import '../../../../services/ai_recommendation_service.dart';
 
 final recommendationEngineProvider = Provider<RecommendationEngine>((ref) {
   return RecommendationEngine();
 });
 
-final aiRecommendationServiceProvider = Provider<AiRecommendationService>((ref) {
-  return AiRecommendationService();
-});
-
-/// AsyncNotifier — tries Gemini AI first, silently falls back to rule matrix.
 final recommendationProvider =
     AsyncNotifierProvider<RecommendationNotifier, OutfitRecommendation>(
   RecommendationNotifier.new,
@@ -25,32 +18,14 @@ final recommendationProvider =
 class RecommendationNotifier extends AsyncNotifier<OutfitRecommendation> {
   @override
   Future<OutfitRecommendation> build() async {
-    final weatherAsync = ref.watch(weatherProvider);
+    // Keep recommendations cached - don't recalculate when navigating away
+    ref.keepAlive();
+
     final profile = ref.watch(profileProvider);
     final wardrobe = ref.watch(wardrobeProvider);
-    final firebaseReady = ref.watch(firebaseAvailableProvider);
 
-    final weather = await weatherAsync.when(
-      data: (w) async => w,
-      loading: () => Future<dynamic>.error('loading'),
-      error: (e, st) => Future<dynamic>.error(e),
-    );
-
-    // Try AI if Firebase is ready
-    if (firebaseReady) {
-      try {
-        final aiService = ref.read(aiRecommendationServiceProvider);
-        return await aiService.generateRecommendation(
-          weather: weather,
-          profile: profile,
-          wardrobe: wardrobe,
-        );
-      } catch (_) {
-        // AI failed — fall back to local rule matrix silently
-      }
-    }
-
-    // Local rule matrix fallback
+    // Await weather data - Riverpod handles loading/error states automatically
+    final weather = await ref.watch(weatherProvider.future);
     final engine = ref.read(recommendationEngineProvider);
     return engine.generateDailyRecommendation(
       weather: weather,
@@ -62,7 +37,6 @@ class RecommendationNotifier extends AsyncNotifier<OutfitRecommendation> {
 
   Future<void> refresh() async => ref.invalidateSelf();
 
-  /// Regenerate outfit for a specific occasion while keeping others unchanged
   Future<void> regenerateOccasion(OutfitOccasion occasion) async {
     final currentState = state;
     if (!currentState.hasValue) return;
@@ -71,17 +45,13 @@ class RecommendationNotifier extends AsyncNotifier<OutfitRecommendation> {
 
     try {
       final weatherAsync = ref.read(weatherProvider);
+      if (!weatherAsync.hasValue) throw Exception('Weather not available');
+
       final profile = ref.read(profileProvider);
       final wardrobe = ref.read(wardrobeProvider);
       final engine = ref.read(recommendationEngineProvider);
+      final weather = weatherAsync.value!;
 
-      final weather = await weatherAsync.when(
-        data: (w) async => w,
-        loading: () => Future<dynamic>.error('loading'),
-        error: (e, st) => Future<dynamic>.error(e),
-      );
-
-      // Generate new full recommendation
       final newRecommendation = engine.generateDailyRecommendation(
         weather: weather,
         stylePreference: profile.stylePreference,
@@ -89,7 +59,6 @@ class RecommendationNotifier extends AsyncNotifier<OutfitRecommendation> {
         profile: profile,
       );
 
-      // Copy old recommendation but replace the specific occasion
       final updatedOccasions = Map<OutfitOccasion, OccasionOutfit>.from(
         currentState.value!.occasions,
       );

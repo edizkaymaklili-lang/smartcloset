@@ -100,51 +100,45 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
           final apiKey = await _settingsService.getRemoveBgApiKey();
           final processedBytes = await _backgroundRemovalService.removeBackground(
             imageFile: picked,
-            apiKey: apiKey,
+            apiKey: apiKey, // empty = free local algorithm
           );
 
           if (mounted) Navigator.pop(context); // Close dialog
 
-          if (processedBytes != null) {
-            if (kIsWeb) {
-              // On web, keep the processed bytes and create a new XFile
-              setState(() {
-                _imageFile = XFile.fromData(
-                  processedBytes,
-                  name: 'processed_${picked.name}',
-                  mimeType: 'image/png',
-                );
-              });
-            } else {
-              // On mobile, save to temporary file
-              final tempFile = await _saveProcessedImage(processedBytes);
-              setState(() {
-                _imageFile = tempFile;
-              });
-            }
-
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Background removed successfully!'),
-                  backgroundColor: AppColors.success,
-                  duration: Duration(seconds: 2),
-                ),
+          if (kIsWeb) {
+            setState(() {
+              _imageFile = XFile.fromData(
+                processedBytes,
+                name: 'processed_${picked.name}',
+                mimeType: 'image/png',
               );
-            }
+            });
+          } else {
+            final tempFile = await _saveProcessedImage(processedBytes);
+            setState(() => _imageFile = tempFile);
+          }
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Background removed!'),
+                backgroundColor: AppColors.success,
+                duration: Duration(seconds: 2),
+              ),
+            );
           }
         } catch (e) {
           if (mounted) {
             Navigator.pop(context); // Close dialog
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Failed to remove background: ${e.toString()}'),
+                content: Text('Background removal failed: $e'),
                 backgroundColor: AppColors.error,
                 duration: const Duration(seconds: 3),
               ),
             );
           }
-          // Use original image if background removal fails
+          // Use original image as fallback
           setState(() {
             _imageFile = kIsWeb ? picked : File(picked.path);
           });
@@ -177,8 +171,9 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
           if (snapshot.hasData) {
             return Image.memory(
               snapshot.data!,
-              fit: BoxFit.cover,
+              fit: BoxFit.contain,
               width: double.infinity,
+              height: double.infinity,
             );
           }
           return const Center(child: CircularProgressIndicator());
@@ -188,8 +183,9 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
       // Mobile: _imageFile is File
       return Image.file(
         _imageFile as File,
-        fit: BoxFit.cover,
+        fit: BoxFit.contain,
         width: double.infinity,
+        height: double.infinity,
       );
     }
   }
@@ -338,48 +334,50 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // Photo picker
+            // Photo picker - 1:1 square standard
             GestureDetector(
               onTap: _showImageSourceSheet,
-              child: Container(
-                height: 220,
-                decoration: BoxDecoration(
-                  color: AppColors.primaryLight.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: AppColors.primary.withValues(alpha: 0.3),
-                    style: BorderStyle.solid,
+              child: AspectRatio(
+                aspectRatio: 1.0,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: AppColors.primary.withValues(alpha: 0.3),
+                      style: BorderStyle.solid,
+                    ),
                   ),
+                  child: _imageFile != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: _buildImagePreview(),
+                        )
+                      : Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.add_a_photo_outlined,
+                              size: 56,
+                              color: AppColors.primary.withValues(alpha: 0.6),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Add Photo',
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color: AppColors.primary,
+                                  ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Tap to take a photo or choose from gallery',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: AppColors.textSecondary,
+                                  ),
+                            ),
+                          ],
+                        ),
                 ),
-                child: _imageFile != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: _buildImagePreview(),
-                      )
-                    : Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.add_a_photo_outlined,
-                            size: 56,
-                            color: AppColors.primary.withValues(alpha: 0.6),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Add Photo',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: AppColors.primary,
-                                ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Tap to take a photo or choose from gallery',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: AppColors.textSecondary,
-                                ),
-                          ),
-                        ],
-                      ),
               ),
             ),
             if (_imageFile != null)

@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -23,7 +25,8 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
   final _descriptionController = TextEditingController();
   final _tagController = TextEditingController();
 
-  File? _selectedImage;
+  XFile? _selectedImage;
+  Uint8List? _imageBytes; // For web preview
   final List<String> _tags = [];
   String _locationPrivacy = 'city'; // 'exact', 'city', 'hidden'
   Position? _currentPosition;
@@ -87,9 +90,15 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
       );
 
       if (pickedFile != null) {
-        setState(() {
-          _selectedImage = File(pickedFile.path);
-        });
+        // Load bytes for web preview
+        final bytes = await pickedFile.readAsBytes();
+
+        if (mounted) {
+          setState(() {
+            _selectedImage = pickedFile;
+            _imageBytes = bytes;
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -269,11 +278,11 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: AppColors.divider),
                 ),
-                child: _selectedImage != null
+                child: _selectedImage != null && _imageBytes != null
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(12),
-                        child: Image.file(
-                          _selectedImage!,
+                        child: Image.memory(
+                          _imageBytes!,
                           fit: BoxFit.cover,
                         ),
                       )

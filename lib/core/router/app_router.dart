@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/wardrobe/domain/entities/clothing_item.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
+import '../../features/auth/presentation/screens/email_verification_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/home/presentation/screens/splash_screen.dart';
 import '../../features/recommendation/presentation/screens/daily_recommendations_screen.dart';
@@ -24,6 +25,7 @@ import '../../features/style_feed/presentation/screens/map_view_screen.dart';
 import '../../features/style_feed/presentation/screens/saved_posts_screen.dart';
 import '../../features/style_feed/presentation/screens/post_detail_screen.dart';
 import '../../features/style_feed/domain/entities/style_post.dart';
+import '../../features/notifications/presentation/screens/notifications_screen.dart';
 import '../../screens/upload_mock_data_screen.dart';
 import '../../test_firebase_connection.dart';
 
@@ -46,6 +48,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/register',
       builder: (context, state) => const RegisterScreen(),
+    ),
+    GoRoute(
+      path: '/verify-email',
+      builder: (context, state) => const EmailVerificationScreen(),
     ),
     GoRoute(
       path: '/onboarding',
@@ -94,6 +100,10 @@ final appRouter = GoRouter(
         GoRoute(
           path: '/profile/settings',
           builder: (context, state) => const SettingsScreen(),
+        ),
+        GoRoute(
+          path: '/notifications',
+          builder: (context, state) => const NotificationsScreen(),
         ),
         GoRoute(
           path: '/contest',

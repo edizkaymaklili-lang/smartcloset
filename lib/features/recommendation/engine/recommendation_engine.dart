@@ -27,9 +27,13 @@ class RecommendationEngine {
     // Step 1: Classify weather
     final weatherClass = _weatherClassifier.classify(weather);
     final weatherSuitability = _weatherSuitabilityLabel(weather);
+    final currentSeason = _currentSeasonLabel(weather.timestamp);
 
     // Step 2: Generate outfit for each occasion with occasion-specific makeup & accessories
+    // Track used items to encourage variety across occasions
+    final usedItemIds = <String>{};
     final occasions = <OutfitOccasion, OccasionOutfit>{};
+
     for (final occasion in OutfitOccasion.values) {
       final makeup = _makeupAdvisor.recommend(weatherClass, occasion);
       final accessories = _accessoryAdvisor.recommend(weatherClass, occasion);
@@ -40,14 +44,26 @@ class RecommendationEngine {
         accessories: accessories,
         makeup: makeup,
       );
-      occasions[occasion] = wardrobe.isEmpty
+
+      final matched = wardrobe.isEmpty
           ? generic
           : _wardrobeMatcher.matchOccasionOutfit(
               outfit: generic,
               wardrobe: wardrobe,
               occasion: occasion.name,
               weatherSuitability: weatherSuitability,
+              currentSeason: currentSeason,
+              excludeItemIds: usedItemIds,
             );
+
+      occasions[occasion] = matched;
+
+      // Track used items for variety in next occasions
+      for (final item in matched.items) {
+        if (item.wardrobeItemId != null) {
+          usedItemIds.add(item.wardrobeItemId!);
+        }
+      }
     }
 
     // Step 4: Generate smart tips (including personalization)
@@ -62,6 +78,15 @@ class RecommendationEngine {
       occasions: occasions,
       smartTips: smartTips,
     );
+  }
+
+  /// Determine current season from date (matches Add Item screen labels)
+  String _currentSeasonLabel(DateTime date) {
+    final month = date.month;
+    if (month >= 3 && month <= 5) return 'Spring';
+    if (month >= 6 && month <= 8) return 'Summer';
+    if (month >= 9 && month <= 11) return 'Autumn';
+    return 'Winter';
   }
 
   String _weatherSuitabilityLabel(WeatherData weather) {

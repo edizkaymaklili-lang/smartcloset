@@ -1,8 +1,5 @@
-import 'dart:convert';
-import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../../../services/fashn_service.dart';
 import '../../../wardrobe/domain/entities/clothing_item.dart';
 import '../../domain/entities/try_on_state.dart';
 
@@ -12,18 +9,17 @@ final tryOnProvider = NotifierProvider<TryOnNotifier, TryOnState>(() {
 
 class TryOnNotifier extends Notifier<TryOnState> {
   final _imagePicker = ImagePicker();
-  final _fashnService = FashnService();
 
   @override
   TryOnState build() {
     return const TryOnState();
   }
 
-  /// Pick model photo from gallery
-  Future<void> pickModelPhoto() async {
+  /// Pick model photo from gallery or camera
+  Future<void> pickModelPhoto({ImageSource source = ImageSource.gallery}) async {
     try {
       final pickedFile = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
+        source: source,
         maxWidth: 1080,
         maxHeight: 1920,
         imageQuality: 90,
@@ -32,121 +28,58 @@ class TryOnNotifier extends Notifier<TryOnState> {
       if (pickedFile != null) {
         state = state.copyWith(
           modelImagePath: pickedFile.path,
-          status: TryOnStatus.idle,
-          clearResultImageUrl: true,
+          overlayItems: [],
           clearErrorMessage: true,
         );
       }
     } catch (e) {
       state = state.copyWith(
-        status: TryOnStatus.error,
         errorMessage: 'Failed to pick image: ${e.toString()}',
       );
     }
   }
 
-  /// Select clothing item and run try-on
-  Future<void> selectItem(ClothingItem item) async {
-    // Guard: model photo must be selected first
-    if (state.modelImagePath == null) {
+  /// Add a garment overlay on the model
+  void addGarment(ClothingItem item) {
+    if (!state.hasModel) {
       state = state.copyWith(
-        status: TryOnStatus.error,
-        errorMessage: 'Please select a model photo first',
+        errorMessage: 'Please select your photo first',
       );
       return;
     }
 
-    // Check if category is supported
-    final fashnCategory = FashnService.mapCategory(item.category.name);
-    if (fashnCategory == null) {
-      state = state.copyWith(
-        status: TryOnStatus.error,
-        errorMessage: 'This category is not supported for try-on yet',
-      );
-      return;
-    }
+    // Remove existing item of same category (replace top with top, etc.)
+    final updated = state.overlayItems
+        .where((i) => i.category != item.category)
+        .toList()
+      ..add(item);
 
     state = state.copyWith(
       selectedItem: item,
-      status: TryOnStatus.uploading,
+      overlayItems: updated,
       clearErrorMessage: true,
-      clearResultImageUrl: true,
     );
-
-    try {
-      // Read model image bytes
-      final modelFile = File(state.modelImagePath!);
-      final modelBytes = await modelFile.readAsBytes();
-
-      // Determine garment image (URL or local file)
-      String garmentImage;
-      if (item.storageImageUrl != null && item.storageImageUrl!.isNotEmpty) {
-        garmentImage = item.storageImageUrl!;
-      } else if (item.localImagePath != null && item.localImagePath!.isNotEmpty) {
-        final garmentFile = File(item.localImagePath!);
-        final garmentBytes = await garmentFile.readAsBytes();
-        garmentImage = base64Encode(garmentBytes); // Properly encode to base64
-      } else {
-        throw Exception('No garment image available');
-      }
-
-      state = state.copyWith(status: TryOnStatus.processing);
-
-      // Call Fashn.ai service
-      final resultUrl = await _fashnService.runTryOn(
-        modelImageBytes: modelBytes,
-        garmentImage: garmentImage,
-        category: fashnCategory,
-      );
-
-      state = state.copyWith(
-        status: TryOnStatus.done,
-        resultImageUrl: resultUrl,
-      );
-    } catch (e) {
-      state = state.copyWith(
-        status: TryOnStatus.error,
-        errorMessage: e.toString(),
-      );
-    }
   }
 
-  /// Reset to initial state
+  /// Remove a garment from overlay
+  void removeGarment(ClothingItem item) {
+    final updated = state.overlayItems.where((i) => i.id != item.id).toList();
+    state = state.copyWith(
+      overlayItems: updated,
+      clearSelectedItem: true,
+    );
+  }
+
+  /// Clear all overlays
+  void clearOverlays() {
+    state = state.copyWith(
+      overlayItems: [],
+      clearSelectedItem: true,
+    );
+  }
+
+  /// Reset everything
   void reset() {
     state = const TryOnState();
-  }
-
-  /// Clear result and go back to idle
-  void clearResult() {
-    state = state.copyWith(
-      status: TryOnStatus.idle,
-      clearResultImageUrl: true,
-      clearSelectedItem: true,
-      clearErrorMessage: true,
-    );
-  }
-
-  /// Start manual alignment mode
-  void startManualAlignment(ClothingItem item) {
-    if (state.modelImagePath == null) {
-      state = state.copyWith(
-        status: TryOnStatus.error,
-        errorMessage: 'Please select a model photo first',
-      );
-      return;
-    }
-
-    state = state.copyWith(
-      selectedItem: item,
-      status: TryOnStatus.idle, // Keep idle for manual mode
-      clearErrorMessage: true,
-    );
-  }
-
-  /// Save manual alignment result (placeholder - actual save logic to be added)
-  void saveManualAlignment() {
-    state = state.copyWith(
-      status: TryOnStatus.done,
-    );
   }
 }

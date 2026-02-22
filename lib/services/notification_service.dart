@@ -1,4 +1,5 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:go_router/go_router.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz;
 
@@ -11,6 +12,9 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   bool _initialized = false;
+
+  /// Set from main() after appRouter is built. Used for navigation on tap.
+  static GoRouter? router;
 
   /// Initialize notification service
   Future<void> initialize() async {
@@ -42,10 +46,31 @@ class NotificationService {
     _initialized = true;
   }
 
-  /// Handle notification tap
+  /// Handle notification tap — navigates based on payload.
+  /// Payload format: "type:postId" e.g. "like:abc123", "follow:", "comment:xyz"
   void _onNotificationTapped(NotificationResponse response) {
-    // Handle navigation when notification is tapped
-    // You can navigate to specific screens based on payload
+    final r = NotificationService.router;
+    if (r == null) return;
+
+    final payload = response.payload;
+    if (payload == null || payload.isEmpty) {
+      r.go('/notifications');
+      return;
+    }
+
+    final parts = payload.split(':');
+    final type = parts.isNotEmpty ? parts[0] : '';
+    final postId = parts.length > 1 && parts[1].isNotEmpty ? parts[1] : null;
+
+    if ((type == 'like' || type == 'comment') && postId != null) {
+      // Deep-link to post detail requires a StylePost object;
+      // navigate to notifications list where the user can tap through.
+      r.go('/notifications');
+    } else if (type == 'follow') {
+      r.go('/profile');
+    } else {
+      r.go('/notifications');
+    }
   }
 
   /// Request notification permissions (iOS)
@@ -142,10 +167,12 @@ class NotificationService {
     await _notifications.cancel(id);
   }
 
-  /// Show immediate notification (for testing)
+  /// Show immediate notification.
+  /// [payload] format: "type:postId" e.g. "like:abc123", "follow:", "comment:xyz"
   Future<void> showImmediateNotification({
     required String title,
     required String body,
+    String? payload,
   }) async {
     if (!_initialized) await initialize();
 
@@ -170,6 +197,7 @@ class NotificationService {
       title,
       body,
       notificationDetails,
+      payload: payload,
     );
   }
 

@@ -22,6 +22,10 @@ class WorldCities {
       'Lisbon',
       'Dublin',
       'Brussels',
+      'Nicosia',
+      'Kyrenia',
+      'Famagusta',
+      'Morphou',
     ],
     'North America': [
       'New York',
@@ -123,5 +127,7 @@ class WorldCities {
     'Rome',
     'San Francisco',
     'Madrid',
+    'Nicosia',
+    'Kyrenia',
   ];
 }

@@ -1,6 +1,6 @@
-import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 import 'package:geoflutterfire_plus/geoflutterfire_plus.dart';
 import '../domain/entities/style_post.dart';
@@ -16,7 +16,7 @@ class StyleFeedRepository {
     required String userId,
     required String userDisplayName,
     String? userAvatar,
-    required File photoFile,
+    required XFile photoFile,
     String? description,
     required List<String> tags,
     PostLocation? location,
@@ -64,10 +64,14 @@ class StyleFeedRepository {
   }
 
   /// Upload photo to Firebase Storage
-  Future<String> _uploadPhoto(String userId, String postId, File file) async {
-    final ref = _storage.ref().child('style_posts/$userId/$postId.jpg');
-    final uploadTask = await ref.putFile(
-      file,
+  Future<String> _uploadPhoto(String userId, String postId, XFile file) async {
+    final ref = _storage.ref().child('posts/$userId/$postId.jpg');
+
+    // Read file as bytes (works on both mobile and web)
+    final bytes = await file.readAsBytes();
+
+    final uploadTask = await ref.putData(
+      bytes,
       SettableMetadata(contentType: 'image/jpeg'),
     );
     return await uploadTask.ref.getDownloadURL();
@@ -102,16 +106,17 @@ class StyleFeedRepository {
     try {
       final sevenDaysAgo = DateTime.now().subtract(const Duration(days: 7));
 
+      // Only filter by date — no orderBy to avoid composite index requirement.
+      // Results are sorted client-side by trendingScore below.
       final snapshot = await _firestore
           .collection('style_posts')
           .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(sevenDaysAgo))
-          .where('likes', isGreaterThanOrEqualTo: 5) // Minimum 5 likes
-          .orderBy('likes', descending: true)
-          .limit(limit * 2) // Fetch extra for client-side sorting
+          .limit(limit * 5)
           .get();
 
       final posts = snapshot.docs
           .map((doc) => StylePost.fromJson(doc.data() as Map<String, dynamic>))
+          .where((p) => p.likes >= 3) // Filter by likes client-side
           .toList();
 
       // Sort by trending score
@@ -328,13 +333,14 @@ class StyleFeedRepository {
       final snapshot = await _firestore
           .collection('style_posts')
           .where('userId', isEqualTo: userId)
-          .orderBy('createdAt', descending: true)
           .limit(limit)
           .get();
 
-      return snapshot.docs
+      final posts = snapshot.docs
           .map((doc) => StylePost.fromJson(doc.data() as Map<String, dynamic>))
           .toList();
+      posts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return posts;
     } catch (e) {
       throw Exception('Failed to fetch user posts: ${e.toString()}');
     }

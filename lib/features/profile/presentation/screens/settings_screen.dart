@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:in_app_review/in_app_review.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/profile_provider.dart';
-import '../../../../services/notification_service.dart';
 import '../../../../services/settings_service.dart';
 import '../../../../services/background_removal_service.dart';
+import '../../../../core/constants/world_cities.dart';
+import '../../../../core/legal/legal_texts.dart';
+import '../../../../core/theme/theme_provider.dart';
+import '../../../../services/location_service.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -22,7 +28,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   bool _notificationsEnabled = true;
   bool _locationEnabled = true;
-  bool _darkMode = false;
   bool _backgroundRemovalEnabled = false;
   String _removeBgApiKey = '';
   String _appVersion = '';
@@ -46,7 +51,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _loadSettings() async {
     final notifications = await _settingsService.getNotificationsEnabled();
     final location = await _settingsService.getLocationEnabled();
-    final darkMode = await _settingsService.getDarkMode();
     final bgRemoval = await _settingsService.getBackgroundRemovalEnabled();
     final apiKey = await _settingsService.getRemoveBgApiKey();
 
@@ -54,7 +58,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       setState(() {
         _notificationsEnabled = notifications;
         _locationEnabled = location;
-        _darkMode = darkMode;
         _backgroundRemovalEnabled = bgRemoval;
         _removeBgApiKey = apiKey;
       });
@@ -82,25 +85,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _toggleDarkMode(bool value) async {
-    setState(() => _darkMode = value);
-    await _settingsService.setDarkMode(value);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Dark mode coming soon!'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    }
+    await ref.read(themeModeProvider.notifier).toggle();
   }
 
   Future<void> _toggleBackgroundRemoval(bool value) async {
-    // If enabling, check if API key is set
-    if (value && _removeBgApiKey.isEmpty) {
-      _showApiKeyDialog();
-      return;
-    }
-
     setState(() => _backgroundRemovalEnabled = value);
     await _settingsService.setBackgroundRemovalEnabled(value);
 
@@ -268,14 +256,236 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
 
     if (confirmed == true && mounted) {
-      // TODO: Implement cache clearing
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Cache cleared successfully'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      // 1. Clear Flutter painting image memory cache
+      PaintingBinding.instance.imageCache.clear();
+      PaintingBinding.instance.imageCache.clearLiveImages();
+
+      // 2. Clear CachedNetworkImage disk cache
+      await DefaultCacheManager().emptyCache();
+
+      // 3. Clear app temp directory (mobile/desktop only)
+      try {
+        final tempDir = await getTemporaryDirectory();
+        final entities = tempDir.listSync();
+        for (final entity in entities) {
+          try {
+            await entity.delete(recursive: true);
+          } catch (_) {}
+        }
+      } catch (_) {
+        // Temp directory not available on web or permissions denied
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cache cleared successfully'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     }
+  }
+
+  void _showCityPicker(BuildContext context, WidgetRef ref, String currentCity) {
+    String searchQuery = '';
+    bool isDetecting = false;
+    String? detectError;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final allCities = WorldCities.allCities;
+          final filteredCities = searchQuery.isEmpty
+              ? allCities
+              : allCities
+                  .where((city) =>
+                      city.toLowerCase().contains(searchQuery.toLowerCase()))
+                  .toList();
+
+          return DraggableScrollableSheet(
+            initialChildSize: 0.7,
+            minChildSize: 0.5,
+            maxChildSize: 0.95,
+            expand: false,
+            builder: (_, scrollController) => Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Column(
+                children: [
+                  // Handle bar
+                  Container(
+                    margin: const EdgeInsets.only(top: 12, bottom: 8),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.divider,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      'Select Your City',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                  ),
+                  // Use My Location button
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: isDetecting
+                            ? null
+                            : () async {
+                                setModalState(() {
+                                  isDetecting = true;
+                                  detectError = null;
+                                });
+                                try {
+                                  final locationService = LocationService();
+                                  final city =
+                                      await locationService.getCurrentCity();
+                                  if (city != null && city.isNotEmpty) {
+                                    ref
+                                        .read(profileProvider.notifier)
+                                        .updateCity(city);
+                                    if (context.mounted) {
+                                      Navigator.pop(context);
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                              'Location detected: $city'),
+                                        ),
+                                      );
+                                    }
+                                  } else {
+                                    setModalState(() {
+                                      isDetecting = false;
+                                      detectError =
+                                          'Could not detect city. Please select manually.';
+                                    });
+                                  }
+                                } catch (e) {
+                                  setModalState(() {
+                                    isDetecting = false;
+                                    detectError =
+                                        'Location error: ${e.toString()}';
+                                  });
+                                }
+                              },
+                        icon: isDetecting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.my_location),
+                        label: Text(
+                            isDetecting ? 'Detecting...' : 'Use My Location'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (detectError != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 4),
+                      child: Text(
+                        detectError!,
+                        style: const TextStyle(
+                            color: Colors.red, fontSize: 12),
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  // Search field
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: TextField(
+                      decoration: InputDecoration(
+                        hintText: 'Search city...',
+                        prefixIcon: const Icon(Icons.search),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                      onChanged: (value) {
+                        setModalState(() {
+                          searchQuery = value;
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Divider(height: 1),
+                  // Cities list
+                  Expanded(
+                    child: filteredCities.isEmpty
+                        ? const Center(
+                            child: Text('No cities found'),
+                          )
+                        : ListView.builder(
+                            controller: scrollController,
+                            itemCount: filteredCities.length,
+                            itemBuilder: (context, index) {
+                              final city = filteredCities[index];
+                              final isSelected = city == currentCity;
+                              return ListTile(
+                                leading: Icon(
+                                  isSelected
+                                      ? Icons.check_circle
+                                      : Icons.location_city,
+                                  color: isSelected
+                                      ? AppColors.primary
+                                      : AppColors.textSecondary,
+                                ),
+                                title: Text(city),
+                                selected: isSelected,
+                                selectedTileColor:
+                                    AppColors.primaryLight.withValues(alpha: 0.1),
+                                onTap: () {
+                                  ref
+                                      .read(profileProvider.notifier)
+                                      .updateCity(city);
+                                  Navigator.pop(context);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('City updated to $city')),
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -310,10 +520,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             icon: Icons.location_city_outlined,
             title: 'City',
             subtitle: profile.city,
-            onTap: () {
-              // Navigate back to profile to edit city
-              Navigator.pop(context);
-            },
+            onTap: () => _showCityPicker(context, ref, profile.city),
           ),
 
           const Divider(height: 32),
@@ -342,7 +549,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             secondary: const Icon(Icons.dark_mode_outlined),
             title: const Text('Dark Mode'),
             subtitle: const Text('Use dark theme'),
-            value: _darkMode,
+            value: ref.watch(themeModeProvider).asData?.value == ThemeMode.dark,
             activeTrackColor: AppColors.primary.withValues(alpha: 0.5),
             activeThumbColor: AppColors.primary,
             onChanged: _toggleDarkMode,
@@ -351,8 +558,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             secondary: const Icon(Icons.auto_fix_high_outlined),
             title: const Text('Auto Background Removal'),
             subtitle: Text(_removeBgApiKey.isEmpty
-                ? 'Tap to set API key'
-                : 'Remove backgrounds from wardrobe photos'),
+                ? 'Remove backgrounds automatically (free local)'
+                : 'Using remove.bg API for higher quality'),
             value: _backgroundRemovalEnabled,
             activeTrackColor: AppColors.primary.withValues(alpha: 0.5),
             activeThumbColor: AppColors.primary,
@@ -373,12 +580,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _SettingsTile(
             icon: Icons.privacy_tip_outlined,
             title: 'Privacy Policy',
-            onTap: () => _showPrivacyPolicy(),
+            onTap: () => _showLegalDoc(
+              LegalTexts.privacyPolicyTitle,
+              LegalTexts.privacyPolicy,
+            ),
           ),
           _SettingsTile(
             icon: Icons.description_outlined,
             title: 'Terms of Service',
-            onTap: () => _showTermsOfService(),
+            onTap: () => _showLegalDoc(
+              LegalTexts.termsOfServiceTitle,
+              LegalTexts.termsOfService,
+            ),
+          ),
+          _SettingsTile(
+            icon: Icons.shield_outlined,
+            title: 'Data Processing Notice',
+            subtitle: 'KVKK / GDPR',
+            onTap: () => _showLegalDoc(
+              LegalTexts.dataProcessingTitle,
+              LegalTexts.dataProcessingNotice,
+            ),
+          ),
+          _SettingsTile(
+            icon: Icons.storage_outlined,
+            title: 'Storage Notice',
+            subtitle: 'Web cookies & local storage',
+            onTap: () => _showLegalDoc(
+              LegalTexts.storageNoticeTitle,
+              LegalTexts.storageNotice,
+            ),
           ),
           _SettingsTile(
             icon: Icons.delete_outline,
@@ -405,6 +636,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             icon: Icons.star_outline,
             title: 'Rate Us',
             onTap: () => _rateApp(),
+          ),
+
+          const Divider(height: 32),
+
+          // Security Section
+          _SectionHeader(title: 'Security'),
+          _SettingsTile(
+            icon: Icons.lock_reset_outlined,
+            title: 'Change Password',
+            subtitle: 'Update your account password',
+            onTap: _showChangePassword,
+          ),
+          _SettingsTile(
+            icon: Icons.person_remove_outlined,
+            title: 'Delete Account',
+            subtitle: 'Permanently delete your account and data',
+            onTap: _showDeleteAccount,
           ),
 
           const Divider(height: 32),
@@ -478,54 +726,304 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  void _showPrivacyPolicy() {
+  void _showChangePassword() {
+    final currentPwController = TextEditingController();
+    final newPwController = TextEditingController();
+    final confirmPwController = TextEditingController();
+    bool saving = false;
+    String? errorMsg;
+    bool obscureCurrent = true;
+    bool obscureNew = true;
+    bool obscureConfirm = true;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Privacy Policy'),
-        content: const SingleChildScrollView(
-          child: Text(
-            'Your privacy is important to us. This app collects minimal data:\n\n'
-            '• Account information (email, display name)\n'
-            '• Wardrobe items you add\n'
-            '• Location data (only when you grant permission)\n'
-            '• Usage analytics to improve the app\n\n'
-            'We never share your personal data with third parties without your consent.',
-            style: TextStyle(fontSize: 14),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Change Password'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: currentPwController,
+                  obscureText: obscureCurrent,
+                  decoration: InputDecoration(
+                    labelText: 'Current Password',
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(obscureCurrent
+                          ? Icons.visibility_off
+                          : Icons.visibility),
+                      onPressed: () => setDialogState(
+                          () => obscureCurrent = !obscureCurrent),
+                    ),
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: newPwController,
+                  obscureText: obscureNew,
+                  decoration: InputDecoration(
+                    labelText: 'New Password',
+                    prefixIcon: const Icon(Icons.lock_reset_outlined),
+                    suffixIcon: IconButton(
+                      icon: Icon(obscureNew
+                          ? Icons.visibility_off
+                          : Icons.visibility),
+                      onPressed: () =>
+                          setDialogState(() => obscureNew = !obscureNew),
+                    ),
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: confirmPwController,
+                  obscureText: obscureConfirm,
+                  decoration: InputDecoration(
+                    labelText: 'Confirm New Password',
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(obscureConfirm
+                          ? Icons.visibility_off
+                          : Icons.visibility),
+                      onPressed: () => setDialogState(
+                          () => obscureConfirm = !obscureConfirm),
+                    ),
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+                if (errorMsg != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    errorMsg!,
+                    style: const TextStyle(
+                        color: AppColors.error, fontSize: 13),
+                  ),
+                ],
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      final current = currentPwController.text;
+                      final newPw = newPwController.text;
+                      final confirm = confirmPwController.text;
+
+                      if (current.isEmpty || newPw.isEmpty) {
+                        setDialogState(
+                            () => errorMsg = 'All fields are required.');
+                        return;
+                      }
+                      if (newPw.length < 6) {
+                        setDialogState(() =>
+                            errorMsg = 'New password must be at least 6 characters.');
+                        return;
+                      }
+                      if (newPw != confirm) {
+                        setDialogState(
+                            () => errorMsg = 'Passwords do not match.');
+                        return;
+                      }
+
+                      setDialogState(() {
+                        saving = true;
+                        errorMsg = null;
+                      });
+
+                      final error = await ref
+                          .read(authProvider.notifier)
+                          .changePassword(
+                            currentPassword: current,
+                            newPassword: newPw,
+                          );
+
+                      if (!ctx.mounted) return;
+
+                      if (error == null) {
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Password changed successfully.'),
+                            backgroundColor: AppColors.success,
+                          ),
+                        );
+                      } else {
+                        setDialogState(() {
+                          saving = false;
+                          errorMsg = error;
+                        });
+                      }
+                    },
+              child: saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Update'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
       ),
     );
   }
 
-  void _showTermsOfService() {
+  void _showDeleteAccount() {
+    final passwordController = TextEditingController();
+    bool deleting = false;
+    String? errorMsg;
+    bool obscure = true;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Terms of Service'),
-        content: const SingleChildScrollView(
-          child: Text(
-            'By using Stil Asist, you agree to:\n\n'
-            '• Use the app for personal, non-commercial purposes\n'
-            '• Provide accurate information\n'
-            '• Not misuse or abuse the service\n'
-            '• Respect other users\' content and privacy\n\n'
-            'We reserve the right to terminate accounts that violate these terms.',
-            style: TextStyle(fontSize: 14),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Delete Account'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'This will permanently delete your account and all associated data. This action cannot be undone.',
+                style: TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: passwordController,
+                obscureText: obscure,
+                decoration: InputDecoration(
+                  labelText: 'Enter your password to confirm',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                        obscure ? Icons.visibility_off : Icons.visibility),
+                    onPressed: () =>
+                        setDialogState(() => obscure = !obscure),
+                  ),
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+              if (errorMsg != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  errorMsg!,
+                  style: const TextStyle(
+                      color: AppColors.error, fontSize: 13),
+                ),
+              ],
+            ],
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: deleting
+                  ? null
+                  : () async {
+                      final password = passwordController.text;
+                      if (password.isEmpty) {
+                        setDialogState(() =>
+                            errorMsg = 'Please enter your password.');
+                        return;
+                      }
+
+                      setDialogState(() {
+                        deleting = true;
+                        errorMsg = null;
+                      });
+
+                      final error = await ref
+                          .read(authProvider.notifier)
+                          .deleteAccount(password);
+
+                      if (!ctx.mounted) return;
+
+                      if (error == null) {
+                        Navigator.pop(ctx);
+                        if (mounted) context.go('/login');
+                      } else {
+                        setDialogState(() {
+                          deleting = false;
+                          errorMsg = error;
+                        });
+                      }
+                    },
+              style: TextButton.styleFrom(
+                  foregroundColor: AppColors.error),
+              child: deleting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Delete Account'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
+      ),
+    );
+  }
+
+  void _showLegalDoc(String title, String body) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 8, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Text(
+                  body,
+                  style: const TextStyle(fontSize: 13, height: 1.6),
+                ),
+              ),
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -558,13 +1056,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  void _rateApp() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Thank you for your support! Rating feature coming soon.'),
-        duration: Duration(seconds: 2),
-      ),
-    );
+  Future<void> _rateApp() async {
+    final InAppReview inAppReview = InAppReview.instance;
+
+    if (await inAppReview.isAvailable()) {
+      await inAppReview.requestReview();
+    } else {
+      // Fallback: Open app store page
+      await inAppReview.openStoreListing(
+        appStoreId: 'your-app-store-id', // Replace with actual App Store ID
+      );
+    }
   }
 }
 

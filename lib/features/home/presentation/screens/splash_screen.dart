@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../main.dart' show firebaseAvailableProvider;
 import '../../../auth/presentation/providers/auth_provider.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -16,33 +17,51 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
+  bool _navigated = false;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 1500),
+      duration: const Duration(milliseconds: 800),
       vsync: this,
     );
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeIn),
     );
-    _scaleAnimation = Tween<double>(begin: 0.7, end: 1.0).animate(
+    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
       CurvedAnimation(parent: _controller, curve: Curves.elasticOut),
     );
 
     _controller.forward();
-    Future.delayed(const Duration(seconds: 2), () {
-      if (!mounted) return;
-      _navigateBasedOnAuth();
-    });
+    _waitForAuthAndNavigate();
   }
 
-  void _navigateBasedOnAuth() {
-    final authState = ref.read(authProvider);
+  Future<void> _waitForAuthAndNavigate() async {
+    // Wait minimum 800ms for animation
+    await Future.delayed(const Duration(milliseconds: 800));
 
+    // Wait up to 5 seconds for Firebase to be ready
+    for (int i = 0; i < 25; i++) {
+      if (!mounted) return;
+      final firebaseReady = ref.read(firebaseAvailableProvider);
+      if (firebaseReady) break;
+      await Future.delayed(const Duration(milliseconds: 200));
+    }
+
+    // Wait a bit more for auth state to settle (redirect result, session restore)
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    if (!mounted || _navigated) return;
+    _navigated = true;
+
+    final authState = ref.read(authProvider);
     if (authState.isAuthenticated) {
-      context.go('/recommendations');
+      if (!authState.emailVerified && authState.email != null) {
+        context.go('/verify-email');
+      } else {
+        context.go('/recommendations');
+      }
     } else {
       context.go('/login');
     }

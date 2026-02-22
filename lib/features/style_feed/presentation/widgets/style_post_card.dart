@@ -3,9 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../domain/entities/style_post.dart';
 import '../providers/style_feed_provider.dart';
+import '../../../profile/presentation/providers/follow_provider.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 
 class StylePostCard extends ConsumerWidget {
   final StylePost post;
@@ -40,6 +43,8 @@ class StylePostCard extends ConsumerWidget {
     final isLiked = post.isLikedBy(currentUserId);
     final savedPostIds = ref.watch(styleFeedProvider.select((state) => state.savedPostIds));
     final isSaved = savedPostIds.contains(post.id);
+    final isFollowing = ref.watch(isFollowingProvider(post.userId)).asData?.value ?? false;
+    final isOwnPost = currentUserId == post.userId;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -115,6 +120,51 @@ class StylePostCard extends ConsumerWidget {
                     ],
                   ),
                 ),
+                // Follow button (only show if not own post)
+                if (!isOwnPost)
+                  TextButton(
+                    onPressed: () async {
+                      try {
+                        await ref.read(followActionsProvider).toggleFollow(post.userId);
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(e.toString()),
+                              backgroundColor: AppColors.error,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 6,
+                      ),
+                      backgroundColor: isFollowing
+                          ? AppColors.background
+                          : AppColors.primary,
+                      foregroundColor: isFollowing
+                          ? AppColors.textPrimary
+                          : Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: isFollowing
+                            ? const BorderSide(color: AppColors.divider)
+                            : BorderSide.none,
+                      ),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      isFollowing ? 'Following' : 'Follow',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
                 if (post.weatherSnapshot != null)
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -222,6 +272,25 @@ class StylePostCard extends ConsumerWidget {
                     child: Icon(
                       isSaved ? Icons.bookmark : Icons.bookmark_border,
                       color: isSaved ? AppColors.primary : AppColors.textSecondary,
+                      size: 24,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                InkWell(
+                  onTap: () {
+                    final shareText = '${post.userDisplayName} shared a style on Stil Asist!\n\n'
+                        '${post.description ?? ""}\n\n'
+                        '${post.location != null ? "📍 ${post.location!.city}\n" : ""}'
+                        'Check it out: https://smartcloset-95789.web.app';
+                    SharePlus.instance.share(ShareParams(text: shareText));
+                  },
+                  borderRadius: BorderRadius.circular(20),
+                  child: const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: Icon(
+                      Icons.share_outlined,
+                      color: AppColors.textSecondary,
                       size: 24,
                     ),
                   ),

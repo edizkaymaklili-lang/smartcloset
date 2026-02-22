@@ -23,10 +23,7 @@ class DefaultFirebaseOptions {
       case TargetPlatform.android:
         return android;
       case TargetPlatform.iOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for ios - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return ios;
       case TargetPlatform.macOS:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for macos - '
@@ -65,6 +62,28 @@ class DefaultFirebaseOptions {
     messagingSenderId: '203315352795',
     projectId: 'smartcloset-95789',
     storageBucket: 'smartcloset-95789.firebasestorage.app',
+  );
+
+  /// iOS Firebase yapılandırması.
+  ///
+  /// ⚠️  KULLANICI AKSİYONU GEREKLİ — aşağıdaki adımları izleyin:
+  ///   1. Firebase Console → Project Settings → "Add app" → iOS
+  ///   2. Bundle ID olarak girin: com.stilasist.stilAsist
+  ///   3. GoogleService-Info.plist indirin
+  ///   4. Xcode'da ios/Runner/ klasörüne sürükle-bırak ile ekleyin
+  ///   5. GoogleService-Info.plist dosyasındaki değerleri aşağıya kopyalayın:
+  ///      - API_KEY          → apiKey
+  ///      - GOOGLE_APP_ID    → appId
+  ///      - CLIENT_ID        → iosClientId
+  ///      - GCG_SENDER_ID    → messagingSenderId (zaten: '203315352795')
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'YOUR_IOS_API_KEY',
+    appId: 'YOUR_IOS_APP_ID',
+    messagingSenderId: '203315352795',
+    projectId: 'smartcloset-95789',
+    storageBucket: 'smartcloset-95789.firebasestorage.app',
+    iosClientId: 'YOUR_IOS_CLIENT_ID',
+    iosBundleId: 'com.stilasist.stilAsist',
   );
 
 }

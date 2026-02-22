@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/enums/outfit_occasion.dart';
 import '../../../../core/enums/style_preference.dart';
+import '../../../../services/location_service.dart';
 import '../../../profile/presentation/providers/profile_provider.dart';
 import '../../../weather/presentation/providers/weather_provider.dart';
 import '../providers/recommendation_provider.dart';
@@ -93,8 +94,27 @@ class _DailyRecommendationsScreenState
           ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
-            onPressed: () => ref.read(weatherProvider.notifier).refresh(),
-            tooltip: 'Refresh',
+            onPressed: () async {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Detecting location...'),
+                  duration: Duration(seconds: 1),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+              await ref.read(weatherProvider.notifier).refresh(detectLocation: true);
+              if (context.mounted) {
+                final city = ref.read(profileProvider).city;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Weather updated for $city'),
+                    duration: const Duration(seconds: 2),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+            tooltip: 'Refresh & Detect Location',
           ),
         ],
       ),
@@ -110,8 +130,9 @@ class _DailyRecommendationsScreenState
               Text('Could not load recommendations',
                   style: Theme.of(context).textTheme.bodyLarge),
               TextButton(
-                onPressed: () =>
-                    ref.read(weatherProvider.notifier).refresh(),
+                onPressed: () async {
+                  await ref.read(weatherProvider.notifier).refresh(detectLocation: true);
+                },
                 child: const Text('Retry'),
               ),
             ],
@@ -119,6 +140,52 @@ class _DailyRecommendationsScreenState
         ),
         data: (rec) => Column(
           children: [
+            // Location banner - tappable to detect/change city
+            _LocationBanner(
+              city: profile.city,
+              onDetectLocation: () async {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Detecting your location...'),
+                    duration: Duration(seconds: 2),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+                try {
+                  final locationService = LocationService();
+                  final city = await locationService.getCurrentCity();
+                  if (city != null && city.isNotEmpty) {
+                    ref.read(profileProvider.notifier).updateCity(city);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Location: $city'),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
+                  } else {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Could not detect location. Go to Settings > City.'),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Location error: $e'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                }
+              },
+            ),
             if (weatherAsync is AsyncData)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -165,6 +232,55 @@ class _DailyRecommendationsScreenState
                           },
                         ))
                     .toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LocationBanner extends StatelessWidget {
+  final String city;
+  final VoidCallback onDetectLocation;
+
+  const _LocationBanner({
+    required this.city,
+    required this.onDetectLocation,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onDetectLocation,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.primaryLight.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.location_on, size: 18, color: AppColors.primary),
+            const SizedBox(width: 6),
+            Text(
+              city,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
+            ),
+            const Spacer(),
+            const Icon(Icons.my_location, size: 16, color: AppColors.primary),
+            const SizedBox(width: 4),
+            const Text(
+              'Detect',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.primary,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],

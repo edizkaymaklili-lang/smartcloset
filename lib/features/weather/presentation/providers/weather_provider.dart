@@ -1,37 +1,53 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../data/datasources/weather_mock_datasource.dart';
+import '../../data/datasources/weather_api_datasource.dart';
 import '../../domain/entities/weather_data.dart';
 import '../../../profile/presentation/providers/profile_provider.dart';
+import '../../../../services/location_service.dart';
 
-final weatherMockProvider = Provider<WeatherMockDatasource>((ref) {
-  return WeatherMockDatasource();
+final weatherApiProvider = Provider<WeatherApiDatasource>((ref) {
+  return WeatherApiDatasource();
 });
 
-final weatherProvider = NotifierProvider<WeatherNotifier, AsyncValue<WeatherData>>(() {
-  return WeatherNotifier();
-});
+final weatherProvider =
+    AsyncNotifierProvider<WeatherNotifier, WeatherData>(WeatherNotifier.new);
 
-class WeatherNotifier extends Notifier<AsyncValue<WeatherData>> {
+class WeatherNotifier extends AsyncNotifier<WeatherData> {
   @override
-  AsyncValue<WeatherData> build() {
-    // Watch user profile to get their city
+  Future<WeatherData> build() async {
+    // Keep weather data cached - don't dispose when navigating away
+    ref.keepAlive();
+
     final profile = ref.watch(profileProvider);
-    _load(city: profile.city);
-    return const AsyncValue.loading();
+    final api = ref.read(weatherApiProvider);
+
+    // Don't auto-detect location on page load to improve performance
+    // Users can manually trigger location detection via refresh button
+    debugPrint('Fetching weather for: ${profile.city}');
+    return api.getCurrentWeather(city: profile.city);
   }
 
-  void _load({String city = 'Istanbul'}) {
-    final datasource = ref.read(weatherMockProvider);
-    try {
-      final data = datasource.getCurrentWeather(city: city);
-      state = AsyncValue.data(data);
-    } catch (e, st) {
-      state = AsyncValue.error(e, st);
+  Future<void> refresh({String? city, bool detectLocation = false}) async {
+    state = const AsyncValue.loading();
+    final targetCity = city ?? ref.read(profileProvider).city;
+
+    if (detectLocation) {
+      try {
+        final locationService = LocationService();
+        final detectedCity = await locationService.getCurrentCity();
+
+        if (detectedCity != null && detectedCity.isNotEmpty) {
+          ref.read(profileProvider.notifier).updateCity(detectedCity);
+          state = await AsyncValue.guard(() =>
+              ref.read(weatherApiProvider).getCurrentWeather(city: detectedCity));
+          return;
+        }
+      } catch (_) {
+        // Failed to detect location
+      }
     }
-  }
 
-  void refresh({String? city}) {
-    final profile = ref.read(profileProvider);
-    _load(city: city ?? profile.city);
+    state = await AsyncValue.guard(
+        () => ref.read(weatherApiProvider).getCurrentWeather(city: targetCity));
   }
 }

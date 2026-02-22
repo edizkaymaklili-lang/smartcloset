@@ -1,16 +1,79 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/world_cities.dart';
 import '../../../../core/enums/style_preference.dart';
 import '../providers/profile_provider.dart';
+import '../providers/follow_provider.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../wardrobe/data/wardrobe_demo_data.dart';
 import '../../../../services/location_service.dart';
 import '../../../../services/notification_service.dart';
 
-class ProfileScreen extends ConsumerWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  final _picker = ImagePicker();
+  Uint8List? _avatarBytes; // for web: holds picked image in memory
+
+  Future<void> _pickAvatar() async {
+    final picked = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 512,
+      maxHeight: 512,
+      imageQuality: 85,
+    );
+    if (picked == null || !mounted) return;
+
+    if (kIsWeb) {
+      final bytes = await picked.readAsBytes();
+      setState(() => _avatarBytes = bytes);
+    } else {
+      final appDir = await getApplicationDocumentsDirectory();
+      final dest = '${appDir.path}/avatar.png';
+      await File(picked.path).copy(dest);
+      ref.read(profileProvider.notifier).updateAvatar(dest);
+      setState(() {}); // refresh to show new avatar
+    }
+  }
+
+  Widget _buildAvatar(String fallbackEmoji) {
+    // Web: show picked bytes if available
+    if (kIsWeb && _avatarBytes != null) {
+      return CircleAvatar(
+        radius: 48,
+        backgroundImage: MemoryImage(_avatarBytes!),
+      );
+    }
+    // Mobile: show saved file path from profile
+    final profile = ref.read(profileProvider);
+    if (!kIsWeb && profile.avatarPath != null) {
+      final file = File(profile.avatarPath!);
+      if (file.existsSync()) {
+        return CircleAvatar(
+          radius: 48,
+          backgroundImage: FileImage(file),
+        );
+      }
+    }
+    // Fallback: emoji
+    return CircleAvatar(
+      radius: 48,
+      backgroundColor: AppColors.primaryLight,
+      child: Text(fallbackEmoji, style: const TextStyle(fontSize: 40)),
+    );
+  }
 
   Future<void> _useMyLocation(BuildContext context, WidgetRef ref) async {
     final locationService = LocationService();
@@ -112,9 +175,12 @@ class ProfileScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final profile = ref.watch(profileProvider);
     final wardrobeCount = WardrobeDemoData.items.length;
+    final currentUserId = ref.watch(authProvider).userId ?? '';
+    final followersCount = ref.watch(followersCountProvider(currentUserId)).asData?.value ?? 0;
+    final followingCount = ref.watch(followingCountProvider(currentUserId)).asData?.value ?? 0;
 
     return Scaffold(
       appBar: AppBar(
@@ -134,30 +200,26 @@ class ProfileScreen extends ConsumerWidget {
           Center(
             child: Column(
               children: [
-                Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: 48,
-                      backgroundColor: AppColors.primaryLight,
-                      child: Text(
-                        profile.stylePreference.icon,
-                        style: const TextStyle(fontSize: 40),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(
-                          color: AppColors.primary,
-                          shape: BoxShape.circle,
+                GestureDetector(
+                  onTap: _pickAvatar,
+                  child: Stack(
+                    children: [
+                      _buildAvatar(profile.stylePreference.icon),
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: AppColors.primary,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.camera_alt,
+                              size: 14, color: Colors.white),
                         ),
-                        child: const Icon(Icons.edit,
-                            size: 14, color: Colors.white),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Text(
@@ -179,9 +241,9 @@ class ProfileScreen extends ConsumerWidget {
                   children: [
                     _StatChip(label: 'Items', value: '$wardrobeCount'),
                     const SizedBox(width: 16),
-                    _StatChip(label: 'Outfits', value: '0'),
+                    _StatChip(label: 'Followers', value: '$followersCount'),
                     const SizedBox(width: 16),
-                    _StatChip(label: 'Worn', value: '0'),
+                    _StatChip(label: 'Following', value: '$followingCount'),
                   ],
                 ),
               ],

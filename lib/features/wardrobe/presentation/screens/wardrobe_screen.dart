@@ -152,201 +152,116 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Statistics Dashboard
-          if (items.isNotEmpty) WardrobeStatsCard(items: items),
-
-          // Search Bar
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Search by name, color, category...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () => setState(() => _searchQuery = ''),
-                      )
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                filled: true,
-                fillColor: AppColors.surface,
-                contentPadding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              onChanged: (value) => setState(() => _searchQuery = value),
-            ),
-          ),
-
-          // Filter Chips - Categories
-          SizedBox(
-            height: 52,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      body: items.isEmpty
+          ? _EmptyState(
+              hasItems: false,
+              onAdd: () => context.push('/wardrobe/add'),
+            )
+          : Column(
               children: [
-                FilterChip(
-                  label: const Text('All'),
-                  selected: _selectedCategory == null,
-                  onSelected: (_) => setState(() => _selectedCategory = null),
-                ),
-                const SizedBox(width: 8),
-                ...ClothingCategory.values.map((cat) {
-                  final count = items.where((i) => i.category == cat).length;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: FilterChip(
-                      avatar: Text(cat.icon),
-                      label: Text('${cat.displayName} ($count)'),
-                      selected: _selectedCategory == cat,
-                      onSelected: (_) => setState(() {
-                        _selectedCategory =
-                            _selectedCategory == cat ? null : cat;
-                      }),
-                    ),
-                  );
-                }),
-              ],
-            ),
-          ),
+                // Statistics Dashboard
+                WardrobeStatsCard(items: items),
 
-          // Color Filters
-          SizedBox(
-            height: 46,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              children: [
-                _ColorFilterChip(
-                  color: null,
-                  label: 'All Colors',
-                  isSelected: _selectedColor == null,
-                  onTap: () => setState(() => _selectedColor = null),
-                ),
-                const SizedBox(width: 8),
-                ...[
-                  ('Red', Colors.red),
-                  ('Blue', Colors.blue),
-                  ('Black', Colors.black),
-                  ('White', Colors.white),
-                  ('Green', Colors.green),
-                  ('Yellow', Colors.yellow),
-                  ('Pink', Colors.pink),
-                  ('Purple', Colors.purple),
-                  ('Brown', Colors.brown),
-                  ('Gray', Colors.grey),
-                ].map((colorData) {
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: _ColorFilterChip(
-                      color: colorData.$2,
-                      label: colorData.$1,
-                      isSelected: _selectedColor == colorData.$1,
-                      onTap: () => setState(() {
-                        _selectedColor = _selectedColor == colorData.$1 ? null : colorData.$1;
-                      }),
+                // Search Bar
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: TextField(
+                    decoration: InputDecoration(
+                      hintText: 'Search by name, color, category...',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () => setState(() => _searchQuery = ''),
+                            )
+                          : null,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: AppColors.surface,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                  );
-                }),
-              ],
-            ),
-          ),
-
-          // Special Filters
-          SizedBox(
-            height: 46,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              children: [
-                FilterChip(
-                  avatar: const Icon(Icons.favorite, size: 16),
-                  label: Text('Favorites (${items.where((i) => i.isFavorite).length})'),
-                  selected: _filterType == 'favorites',
-                  onSelected: (_) => setState(() {
-                    _filterType = _filterType == 'favorites' ? null : 'favorites';
-                  }),
-                ),
-                const SizedBox(width: 8),
-                FilterChip(
-                  avatar: const Icon(Icons.access_time, size: 16),
-                  label: Text('Rarely Worn (${items.where((i) => i.lastWorn == null || DateTime.now().difference(i.lastWorn!).inDays > 30).length})'),
-                  selected: _filterType == 'rarely-worn',
-                  onSelected: (_) => setState(() {
-                    _filterType = _filterType == 'rarely-worn' ? null : 'rarely-worn';
-                  }),
-                ),
-                const SizedBox(width: 8),
-                FilterChip(
-                  avatar: const Icon(Icons.fiber_new, size: 16),
-                  label: Text('New Items (${items.where((i) => i.lastWorn == null).length})'),
-                  selected: _filterType == 'new',
-                  onSelected: (_) => setState(() {
-                    _filterType = _filterType == 'new' ? null : 'new';
-                  }),
-                ),
-              ],
-            ),
-          ),
-
-          Expanded(
-            child: filtered.isEmpty
-                ? _EmptyState(
-                    hasItems: items.isNotEmpty,
-                    onAdd: () => context.push('/wardrobe/add'),
-                  )
-                : GridView.builder(
-                    padding: const EdgeInsets.all(16),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      childAspectRatio: 0.85,
-                    ),
-                    itemCount: filtered.length,
-                    itemBuilder: (_, i) => _ClothingCard(
-                      item: filtered[i],
-                      onTap: () => _showQuickView(filtered[i]),
-                      onDelete: () => _confirmDelete(filtered[i]),
-                      onFavorite: () => ref
-                          .read(wardrobeProvider.notifier)
-                          .toggleFavorite(filtered[i].id),
-                    ),
+                    onChanged: (value) => setState(() => _searchQuery = value),
                   ),
-          ),
-        ],
-      ),
+                ),
+
+                // Filter Chips - Categories
+                SizedBox(
+                  height: 52,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    children: [
+                      FilterChip(
+                        label: const Text('All'),
+                        selected: _selectedCategory == null && _filterType == null,
+                        onSelected: (_) => setState(() {
+                          _selectedCategory = null;
+                          _filterType = null;
+                          _selectedColor = null;
+                        }),
+                      ),
+                      const SizedBox(width: 8),
+                      ...ClothingCategory.values.map((cat) {
+                        final count = items.where((i) => i.category == cat).length;
+                        if (count == 0) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: FilterChip(
+                            avatar: Text(cat.icon),
+                            label: Text('${cat.displayName} ($count)'),
+                            selected: _selectedCategory == cat,
+                            onSelected: (_) => setState(() {
+                              _selectedCategory =
+                                  _selectedCategory == cat ? null : cat;
+                            }),
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+
+                Expanded(
+                  child: filtered.isEmpty
+                      ? _EmptyState(
+                          hasItems: true,
+                          onAdd: () => context.push('/wardrobe/add'),
+                        )
+                      : GridView.builder(
+                          padding: const EdgeInsets.all(16),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                            childAspectRatio: 0.80,
+                          ),
+                          itemCount: filtered.length,
+                          itemBuilder: (_, i) => _ClothingCard(
+                            item: filtered[i],
+                            onTap: () => _showQuickView(filtered[i]),
+                            onDelete: () => _confirmDelete(filtered[i]),
+                            onFavorite: () => ref
+                                .read(wardrobeProvider.notifier)
+                                .toggleFavorite(filtered[i].id),
+                          ),
+                        ),
+                ),
+              ],
+            ),
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          FloatingActionButton.small(
-            heroTag: 'collections',
-            onPressed: () => context.push('/wardrobe/collections'),
-            backgroundColor: AppColors.secondary,
-            tooltip: 'Collections',
-            child: const Icon(Icons.collections_outlined, color: Colors.white),
-          ),
-          const SizedBox(height: 8),
-          FloatingActionButton.small(
-            heroTag: 'style_board',
-            onPressed: () => context.push('/wardrobe/style-board'),
-            backgroundColor: AppColors.secondary,
-            tooltip: 'Style Board',
-            child: const Icon(Icons.style, color: Colors.white),
-          ),
-          const SizedBox(height: 8),
-          FloatingActionButton.small(
-            heroTag: 'try_on',
-            onPressed: () => context.push('/wardrobe/try-on'),
-            backgroundColor: AppColors.secondary,
-            tooltip: 'Virtual Try-On',
-            child: const Icon(Icons.checkroom, color: Colors.white),
-          ),
-          const SizedBox(height: 8),
+          if (items.isNotEmpty)
+            FloatingActionButton(
+              heroTag: 'try_on',
+              onPressed: () => context.push('/wardrobe/try-on'),
+              backgroundColor: AppColors.surface,
+              child: const Icon(Icons.accessibility_new, color: AppColors.primary),
+            ),
+          if (items.isNotEmpty) const SizedBox(height: 12),
           FloatingActionButton.extended(
             heroTag: 'add_item',
             onPressed: () => context.push('/wardrobe/add'),
@@ -521,19 +436,31 @@ class _ClothingCard extends StatelessWidget {
 
   Widget _buildImage() {
     if (item.storageImageUrl != null && item.storageImageUrl!.isNotEmpty) {
-      return Image.network(
-        item.storageImageUrl!,
-        fit: BoxFit.cover,
-        errorBuilder: (ctx, e, st) => _iconFallback(),
+      return Container(
+        color: AppColors.primaryLight.withValues(alpha: 0.1),
+        child: Image.network(
+          item.storageImageUrl!,
+          fit: BoxFit.contain,
+          width: double.infinity,
+          height: double.infinity,
+          errorBuilder: (ctx, e, st) => _iconFallback(),
+        ),
       );
     }
     if (item.localImagePath != null && item.localImagePath!.isNotEmpty) {
-      // Web cannot access local file paths - show fallback icon
-      // Images are uploaded to Firebase Storage for web support
       if (kIsWeb) {
         return _iconFallback();
       }
-      return Image.file(File(item.localImagePath!), fit: BoxFit.cover, errorBuilder: (ctx, e, st) => _iconFallback());
+      return Container(
+        color: AppColors.primaryLight.withValues(alpha: 0.1),
+        child: Image.file(
+          File(item.localImagePath!),
+          fit: BoxFit.contain,
+          width: double.infinity,
+          height: double.infinity,
+          errorBuilder: (ctx, e, st) => _iconFallback(),
+        ),
+      );
     }
     return _iconFallback();
   }
@@ -590,59 +517,3 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-class _ColorFilterChip extends StatelessWidget {
-  final Color? color;
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _ColorFilterChip({
-    required this.color,
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary.withValues(alpha: 0.1) : AppColors.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? AppColors.primary : AppColors.divider,
-            width: isSelected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (color != null) ...[
-              Container(
-                width: 16,
-                height: 16,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.black12),
-                ),
-              ),
-              const SizedBox(width: 6),
-            ],
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                color: isSelected ? AppColors.primary : AppColors.textSecondary,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

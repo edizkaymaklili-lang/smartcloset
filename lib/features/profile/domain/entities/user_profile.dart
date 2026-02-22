@@ -20,6 +20,9 @@ class UserProfile {
   final List<UserHobby> hobbies;
   final ColorSeason? colorSeason;
 
+  /// Local file path or Firebase Storage URL for the profile avatar
+  final String? avatarPath;
+
   const UserProfile({
     required this.displayName,
     required this.age,
@@ -32,6 +35,7 @@ class UserProfile {
     this.workType,
     this.hobbies = const [],
     this.colorSeason,
+    this.avatarPath,
   });
 
   UserProfile copyWith({
@@ -46,6 +50,7 @@ class UserProfile {
     WorkType? workType,
     List<UserHobby>? hobbies,
     ColorSeason? colorSeason,
+    String? avatarPath,
   }) {
     return UserProfile(
       displayName: displayName ?? this.displayName,
@@ -59,6 +64,7 @@ class UserProfile {
       workType: workType ?? this.workType,
       hobbies: hobbies ?? this.hobbies,
       colorSeason: colorSeason ?? this.colorSeason,
+      avatarPath: avatarPath ?? this.avatarPath,
     );
   }
 

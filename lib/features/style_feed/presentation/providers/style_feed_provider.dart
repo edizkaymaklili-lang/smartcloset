@@ -1,11 +1,14 @@
-import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../data/style_feed_repository.dart';
 import '../../domain/entities/style_post.dart';
 import '../../../profile/presentation/providers/profile_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../notifications/data/repositories/notification_repository.dart';
+import '../../../notifications/domain/entities/notification.dart';
 import '../../../../services/location_service.dart';
+import '../../../../main.dart' show firebaseAvailableProvider;
 
 /// Feed view mode
 enum FeedMode { forYou, trending, nearby }
@@ -61,6 +64,11 @@ final locationServiceProvider = Provider<LocationService>((ref) {
   return LocationService();
 });
 
+/// Provider for notification repository
+final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {
+  return NotificationRepository();
+});
+
 /// Provider for current user ID (from Firebase Auth)
 final currentUserIdProvider = Provider<String>((ref) {
   final authState = ref.watch(authProvider);
@@ -109,6 +117,16 @@ class StyleFeedNotifier extends Notifier<StyleFeedState> {
     );
 
     try {
+      // Wait for Firebase to be ready
+      final firebaseReady = ref.read(firebaseAvailableProvider);
+      if (!firebaseReady) {
+        // Wait up to 5 seconds for Firebase
+        for (int i = 0; i < 50; i++) {
+          await Future.delayed(const Duration(milliseconds: 100));
+          if (ref.read(firebaseAvailableProvider)) break;
+        }
+      }
+
       final posts = await _fetchPostsByMode(newMode);
       state = state.copyWith(
         posts: posts,
@@ -177,6 +195,10 @@ class StyleFeedNotifier extends Notifier<StyleFeedState> {
   /// Toggle like on a post
   Future<void> toggleLike(String postId) async {
     try {
+      // Find the post
+      final post = state.posts.firstWhere((p) => p.id == postId);
+      final wasLiked = post.isLikedBy(_currentUserId);
+
       // Optimistic update
       final updatedPosts = state.posts.map((post) {
         if (post.id == postId) {
@@ -195,6 +217,25 @@ class StyleFeedNotifier extends Notifier<StyleFeedState> {
 
       // Sync with backend
       await _repository.toggleLike(postId, _currentUserId);
+
+      // Create notification if this is a like (not unlike) and not liking own post
+      if (!wasLiked && _currentUserId != post.userId) {
+        try {
+          final authState = ref.read(authProvider);
+          final notificationRepo = ref.read(notificationRepositoryProvider);
+          await notificationRepo.createNotification(
+            userId: post.userId,
+            type: NotificationType.like,
+            fromUserId: _currentUserId,
+            fromUserName: authState.displayName ?? 'Someone',
+            fromUserAvatar: null, // Avatar will be fetched from Firestore if needed
+            postId: post.id,
+            postImageUrl: post.photoUrl,
+          );
+        } catch (e) {
+          // Don't fail the like if notification fails
+        }
+      }
     } catch (e) {
       // Revert on error
       state = state.copyWith(errorMessage: 'Failed to like post');
@@ -231,7 +272,7 @@ class StyleFeedNotifier extends Notifier<StyleFeedState> {
 
   /// Create a new post
   Future<StylePost?> createPost({
-    required File photoFile,
+    required XFile photoFile,
     String? description,
     required List<String> tags,
     PostLocation? location,

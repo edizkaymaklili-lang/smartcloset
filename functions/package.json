@@ -1,0 +1,22 @@
+{
+  "name": "stil-asist-functions",
+  "version": "1.0.0",
+  "description": "Firebase Cloud Functions for Stil Asist — Gemini AI outfit recommendations",
+  "main": "index.js",
+  "engines": {
+    "node": "20"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.3.0",
+    "firebase-functions": "^5.0.1",
+    "@google/generative-ai": "^0.15.0",
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "firebase-functions-test": "^3.1.0"
+  },
+  "scripts": {
+    "deploy": "firebase deploy --only functions",
+    "serve": "firebase emulators:start --only functions"
+  }
+}

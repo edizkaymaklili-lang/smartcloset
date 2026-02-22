@@ -47,7 +47,7 @@ class SettingsService {
   /// Get background removal enabled setting
   Future<bool> getBackgroundRemovalEnabled() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_keyBackgroundRemoval) ?? false;
+    return prefs.getBool(_keyBackgroundRemoval) ?? true;
   }
 
   /// Set background removal enabled setting

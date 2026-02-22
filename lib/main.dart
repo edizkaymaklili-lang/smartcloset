@@ -7,13 +7,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/theme_provider.dart';
 import 'core/error/error_handler.dart';
 import 'features/profile/presentation/providers/profile_provider.dart';
 import 'firebase_options.dart';
 import 'services/notification_service.dart';
 
-// Firebase availability flag — false until flutterfire configure is run
-final firebaseAvailableProvider = Provider<bool>((ref) => false);
+// Firebase availability flag — starts false, updated when Firebase is ready
+final firebaseAvailableProvider = NotifierProvider<FirebaseAvailableNotifier, bool>(
+  FirebaseAvailableNotifier.new,
+);
+
+class FirebaseAvailableNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void setReady() => state = true;
+}
 
 void main() async {
   await runZonedGuarded(() async {
@@ -24,68 +34,78 @@ void main() async {
 
     final prefs = await SharedPreferences.getInstance();
 
-    // Initialize notification service
-    await NotificationService().initialize();
-
-    // Try Firebase init — silently skip if not yet configured
-    bool firebaseReady = false;
-    try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-      firebaseReady = true;
-
-      // Initialize Crashlytics if Firebase is available (mobile/desktop only, not web)
-      if (firebaseReady && !kIsWeb) {
-        // Pass all uncaught Flutter errors to Crashlytics
-        FlutterError.onError = (errorDetails) {
-          FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
-        };
-
-        // Pass all uncaught asynchronous errors to Crashlytics
-        PlatformDispatcher.instance.onError = (error, stack) {
-          FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-          return true;
-        };
-
-        // Enable Crashlytics collection (can be disabled in debug mode if needed)
-        await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(!kDebugMode);
-      }
-    } catch (_) {
-      // Firebase not configured yet — app works with local rule matrix
+    // Don't block startup on notification service (not supported on web)
+    if (!kIsWeb) {
+      NotificationService().initialize();
+      NotificationService.router = appRouter;
     }
 
+    // Start app IMMEDIATELY - don't wait for Firebase
+    final container = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
+    );
+
     runApp(
-      ProviderScope(
-        overrides: [
-          sharedPreferencesProvider.overrideWithValue(prefs),
-          firebaseAvailableProvider.overrideWithValue(firebaseReady),
-        ],
+      UncontrolledProviderScope(
+        container: container,
         child: const StilAsistApp(),
       ),
     );
+
+    // Initialize Firebase in background AFTER app is visible
+    _initFirebaseInBackground(container);
   }, (error, stack) {
-    // Catch errors that occur outside of Flutter
-    // Only use Crashlytics on non-web platforms
     if (!kIsWeb) {
       try {
         FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
       } catch (_) {
-        // Crashlytics not available, error already logged by AppErrorHandler
+        // Crashlytics not available
       }
     }
   });
 }
 
-class StilAsistApp extends StatelessWidget {
+/// Firebase init runs AFTER the app is already on screen
+Future<void> _initFirebaseInBackground(ProviderContainer container) async {
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+
+    // Update firebase flag so providers know Firebase is ready
+    container.read(firebaseAvailableProvider.notifier).setReady();
+
+    // Setup Crashlytics (non-web only)
+    if (!kIsWeb) {
+      FlutterError.onError = (errorDetails) {
+        FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
+      };
+      PlatformDispatcher.instance.onError = (error, stack) {
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+        return true;
+      };
+      await FirebaseCrashlytics.instance
+          .setCrashlyticsCollectionEnabled(!kDebugMode);
+    }
+  } catch (_) {
+    // Firebase not configured — app works with local data
+  }
+}
+
+class StilAsistApp extends ConsumerWidget {
   const StilAsistApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(themeModeProvider).asData?.value ?? ThemeMode.system;
     return MaterialApp.router(
       title: 'Stil Asist',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: themeMode,
       routerConfig: appRouter,
     );
   }

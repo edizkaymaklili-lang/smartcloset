@@ -1,8 +1,29 @@
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart';
 
 class LocationService {
-  /// Check if location services are enabled and permissions are granted
+  final Dio _dio = Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 5),
+    receiveTimeout: const Duration(seconds: 5),
+  ));
+
+  /// Check if location permission is already granted (without asking)
+  Future<bool> isPermissionGranted() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return false;
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      return permission == LocationPermission.whileInUse ||
+          permission == LocationPermission.always;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Check if location services are enabled and permissions are granted.
+  /// Requests permission if not yet granted.
   Future<bool> checkPermissions() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
@@ -27,13 +48,9 @@ class LocationService {
   /// Get current coordinates (latitude and longitude)
   Future<({double latitude, double longitude})?> getCurrentCoordinates() async {
     try {
-      // Check permissions first
       final hasPermission = await checkPermissions();
-      if (!hasPermission) {
-        return null;
-      }
+      if (!hasPermission) return null;
 
-      // Get current position
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.medium,
@@ -43,41 +60,54 @@ class LocationService {
 
       return (latitude: position.latitude, longitude: position.longitude);
     } catch (e) {
-      // Location fetch failed
       return null;
     }
   }
 
-  /// Get location details (city and country) from coordinates
+  /// Reverse geocode using Nominatim (OpenStreetMap) - free, no API key, works on web
   Future<({String? city, String? country})?> getLocationFromCoordinates(
     double latitude,
     double longitude,
   ) async {
     try {
-      final placemarks = await placemarkFromCoordinates(latitude, longitude);
+      final response = await _dio.get(
+        'https://nominatim.openstreetmap.org/reverse',
+        queryParameters: {
+          'format': 'json',
+          'lat': latitude,
+          'lon': longitude,
+          'zoom': 10,
+          'addressdetails': 1,
+        },
+        options: Options(headers: {
+          if (!kIsWeb) 'User-Agent': 'StilAsist/1.0',
+          'Accept-Language': 'en',
+        }),
+      );
 
-      if (placemarks.isNotEmpty) {
-        final placemark = placemarks.first;
+      final data = response.data;
+      final address = data['address'];
 
-        // Get city name
-        String? city = placemark.locality ??
-            placemark.subAdministrativeArea ??
-            placemark.administrativeArea;
+      if (address == null) return null;
 
-        // Normalize city name
-        if (city != null) {
-          city = _normalizeCityName(city);
-        }
+      // Try to get city name - prefer larger administrative areas
+      // that weather APIs can recognize
+      String? city = address['city'] ??
+          address['town'] ??
+          address['state'] ??
+          address['province'] ??
+          address['county'] ??
+          address['municipality'] ??
+          address['village'];
 
-        // Get country name
-        String? country = placemark.country;
+      String? country = address['country'];
 
-        return (city: city, country: country);
+      if (city != null) {
+        city = _normalizeCityName(city);
       }
 
-      return null;
+      return (city: city, country: country);
     } catch (e) {
-      // Geocoding failed
       return null;
     }
   }
@@ -85,13 +115,9 @@ class LocationService {
   /// Get current location and return city name
   Future<String?> getCurrentCity() async {
     try {
-      // Check permissions first
       final hasPermission = await checkPermissions();
-      if (!hasPermission) {
-        return null;
-      }
+      if (!hasPermission) return null;
 
-      // Get current position
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.medium,
@@ -99,16 +125,48 @@ class LocationService {
         ),
       );
 
-      // Use the new method to get location details
       final location = await getLocationFromCoordinates(
         position.latitude,
         position.longitude,
       );
 
-      return location?.city;
-    } catch (e) {
-      // Location fetch failed
+      final city = location?.city;
+      if (city == null) return null;
+
+      // Verify the city name is recognized by weather API (Open-Meteo geocoding)
+      final isValid = await _verifyCityName(city);
+      if (isValid) return city;
+
+      // If city name is not recognized, try with country appended
+      final country = location?.country;
+      if (country != null) {
+        final cityWithCountry = '$city, $country';
+        final isValidWithCountry = await _verifyCityName(cityWithCountry);
+        if (isValidWithCountry) return city;
+      }
+
       return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Verify a city name exists in Open-Meteo geocoding API
+  Future<bool> _verifyCityName(String cityName) async {
+    try {
+      final response = await _dio.get(
+        'https://geocoding-api.open-meteo.com/v1/search',
+        queryParameters: {
+          'name': cityName,
+          'count': 1,
+          'language': 'en',
+          'format': 'json',
+        },
+      );
+      final data = response.data;
+      return data['results'] != null && (data['results'] as List).isNotEmpty;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -116,7 +174,6 @@ class LocationService {
   String _normalizeCityName(String cityName) {
     final normalized = cityName.trim();
 
-    // Map common variations and special characters to standard English names
     final cityMap = {
       // Turkish cities
       'İstanbul': 'Istanbul',
@@ -124,6 +181,19 @@ class LocationService {
       'Eskişehir': 'Eskisehir',
       'Diyarbakır': 'Diyarbakir',
       'Balıkesir': 'Balikesir',
+
+      // Northern Cyprus cities
+      'Lefkoşa': 'Nicosia',
+      'Lefkosa': 'Nicosia',
+      'Girne': 'Kyrenia',
+      'Gazi Mağusa': 'Famagusta',
+      'Gazimağusa': 'Famagusta',
+      'Güzelyurt': 'Morphou',
+      'İskele': 'Trikomo',
+      'Kyrenia District': 'Kyrenia',
+      'Famagusta District': 'Famagusta',
+      'Nicosia District': 'Nicosia',
+      'Girne District': 'Kyrenia',
 
       // Other common variations
       'New York City': 'New York',

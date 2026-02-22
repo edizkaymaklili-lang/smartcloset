@@ -1,7 +1,7 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
@@ -17,107 +17,66 @@ class MapViewScreen extends ConsumerStatefulWidget {
 }
 
 class _MapViewScreenState extends ConsumerState<MapViewScreen> {
-  final Completer<GoogleMapController> _mapController = Completer();
-  Set<Marker> _markers = {};
-  Position? _currentPosition;
+  final MapController _mapController = MapController();
+  LatLng _mapCenter = const LatLng(41.0082, 28.9784);
   bool _isLoadingLocation = false;
-  String? _selectedFilter; // For tag filtering
+  String? _selectedFilter;
   StylePost? _selectedPost;
-
-  // Default map center (Istanbul, Turkey)
-  static const CameraPosition _initialPosition = CameraPosition(
-    target: LatLng(41.0082, 28.9784),
-    zoom: 10,
-  );
 
   @override
   void initState() {
     super.initState();
-    _loadPosts();
-    _getCurrentLocation();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _getCurrentLocation();
+      _loadPosts();
+    });
+  }
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadPosts() async {
-    // Load all posts with location data
     await ref.read(styleFeedProvider.notifier).loadPosts(mode: FeedMode.forYou);
-    _buildMarkers();
   }
 
   Future<void> _getCurrentLocation() async {
+    if (!mounted) return;
     setState(() => _isLoadingLocation = true);
-
     try {
-      final hasPermission = await Geolocator.checkPermission();
-      if (hasPermission == LocationPermission.denied) {
-        await Geolocator.requestPermission();
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) return;
       }
+      if (permission == LocationPermission.deniedForever) return;
 
-      final position = await Geolocator.getCurrentPosition();
-      if (mounted) {
-        setState(() => _currentPosition = position);
-
-        // Move camera to user location
-        final controller = await _mapController.future;
-        controller.animateCamera(
-          CameraUpdate.newCameraPosition(
-            CameraPosition(
-              target: LatLng(position.latitude, position.longitude),
-              zoom: 12,
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      // Silently fail
-    } finally {
-      if (mounted) {
-        setState(() => _isLoadingLocation = false);
-      }
-    }
-  }
-
-  void _buildMarkers() {
-    final feedState = ref.read(styleFeedProvider);
-    final posts = feedState.posts.where((post) => post.location != null);
-
-    // Apply filter if active
-    final filteredPosts = _selectedFilter != null
-        ? posts.where((post) => post.tags.contains(_selectedFilter!))
-        : posts;
-
-    final markers = <Marker>{};
-
-    for (final post in filteredPosts) {
-      final location = post.location!;
-      markers.add(
-        Marker(
-          markerId: MarkerId(post.id),
-          position: LatLng(
-            location.coordinates.latitude,
-            location.coordinates.longitude,
-          ),
-          onTap: () => _onMarkerTap(post),
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-            _selectedPost?.id == post.id
-                ? BitmapDescriptor.hueRose
-                : BitmapDescriptor.hueViolet,
-          ),
-          infoWindow: InfoWindow(
-            title: post.userDisplayName,
-            snippet: location.city,
-          ),
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 10),
         ),
       );
-    }
 
-    setState(() => _markers = markers);
+      if (mounted) {
+        setState(() => _mapCenter = LatLng(position.latitude, position.longitude));
+        _mapController.move(_mapCenter, 12);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Location error: $e'), duration: const Duration(seconds: 3)),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoadingLocation = false);
+    }
   }
 
   void _onMarkerTap(StylePost post) {
     setState(() => _selectedPost = post);
-    _buildMarkers(); // Rebuild to highlight selected marker
-
-    // Show bottom sheet with post preview
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -129,39 +88,54 @@ class _MapViewScreenState extends ConsumerState<MapViewScreen> {
         },
       ),
     ).whenComplete(() {
-      setState(() => _selectedPost = null);
-      _buildMarkers();
+      if (mounted) setState(() => _selectedPost = null);
     });
   }
 
-  Future<void> _centerOnUserLocation() async {
-    if (_currentPosition == null) {
-      await _getCurrentLocation();
-      return;
-    }
-
-    final controller = await _mapController.future;
-    controller.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(
-          target: LatLng(
-            _currentPosition!.latitude,
-            _currentPosition!.longitude,
-          ),
-          zoom: 12,
-        ),
-      ),
-    );
+  List<Marker> _buildMarkers(List<StylePost> posts) {
+    return posts
+        .where((p) =>
+            p.location != null &&
+            (_selectedFilter == null || p.tags.contains(_selectedFilter!)))
+        .map((post) {
+          final loc = post.location!;
+          final isSelected = _selectedPost?.id == post.id;
+          return Marker(
+            point: LatLng(loc.coordinates.latitude, loc.coordinates.longitude),
+            width: isSelected ? 48 : 40,
+            height: isSelected ? 48 : 40,
+            child: GestureDetector(
+              onTap: () => _onMarkerTap(post),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: isSelected ? AppColors.primary : Colors.white,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppColors.primary,
+                    width: isSelected ? 3 : 2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  Icons.checkroom,
+                  color: isSelected ? Colors.white : AppColors.primary,
+                  size: isSelected ? 24 : 20,
+                ),
+              ),
+            ),
+          );
+        })
+        .toList();
   }
 
-  void _showFilterDialog() {
-    final feedState = ref.read(styleFeedProvider);
-    final allTags = feedState.posts
-        .expand((post) => post.tags)
-        .toSet()
-        .toList()
-      ..sort();
-
+  void _showFilterDialog(List<StylePost> posts) {
+    final allTags = posts.expand((p) => p.tags).toSet().toList()..sort();
     showModalBottomSheet(
       context: context,
       builder: (context) => SafeArea(
@@ -173,18 +147,12 @@ class _MapViewScreenState extends ConsumerState<MapViewScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Filter by Tag',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  const Text('Filter by Tag',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   if (_selectedFilter != null)
                     TextButton(
                       onPressed: () {
                         setState(() => _selectedFilter = null);
-                        _buildMarkers();
                         Navigator.pop(context);
                       },
                       child: const Text('Clear'),
@@ -200,17 +168,12 @@ class _MapViewScreenState extends ConsumerState<MapViewScreen> {
                   final isSelected = _selectedFilter == tag;
                   return ListTile(
                     leading: Icon(
-                      isSelected
-                          ? Icons.check_circle
-                          : Icons.circle_outlined,
+                      isSelected ? Icons.check_circle : Icons.circle_outlined,
                       color: isSelected ? AppColors.primary : null,
                     ),
                     title: Text('#$tag'),
                     onTap: () {
-                      setState(() {
-                        _selectedFilter = isSelected ? null : tag;
-                      });
-                      _buildMarkers();
+                      setState(() => _selectedFilter = isSelected ? null : tag);
                       Navigator.pop(context);
                     },
                   );
@@ -225,12 +188,8 @@ class _MapViewScreenState extends ConsumerState<MapViewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(styleFeedProvider, (previous, next) {
-      // Rebuild markers when posts change
-      if (previous?.posts != next.posts) {
-        _buildMarkers();
-      }
-    });
+    final feedState = ref.watch(styleFeedProvider);
+    final markers = _buildMarkers(feedState.posts);
 
     return Scaffold(
       appBar: AppBar(
@@ -238,7 +197,7 @@ class _MapViewScreenState extends ConsumerState<MapViewScreen> {
         backgroundColor: AppColors.surface,
         actions: [
           IconButton(
-            onPressed: _showFilterDialog,
+            onPressed: () => _showFilterDialog(feedState.posts),
             icon: Badge(
               isLabelVisible: _selectedFilter != null,
               child: const Icon(Icons.filter_list),
@@ -249,57 +208,50 @@ class _MapViewScreenState extends ConsumerState<MapViewScreen> {
       ),
       body: Stack(
         children: [
-          // Google Map
-          GoogleMap(
-            initialCameraPosition: _initialPosition,
-            markers: _markers,
-            onMapCreated: (controller) {
-              _mapController.complete(controller);
-            },
-            myLocationEnabled: true,
-            myLocationButtonEnabled: false, // We'll add custom button
-            mapType: MapType.normal,
-            zoomControlsEnabled: false,
-            compassEnabled: true,
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: _mapCenter,
+              initialZoom: 10,
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'app.stilasist',
+              ),
+              MarkerLayer(markers: markers),
+            ],
           ),
 
-          // Stats overlay
+          // Stats card
           Positioned(
             top: 16,
             left: 16,
             right: 16,
             child: Card(
               elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               child: Padding(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _buildStatItem(
-                      Icons.location_on,
-                      '${_markers.length}',
-                      'Posts',
+                    const Icon(Icons.location_on, size: 18, color: AppColors.primary),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${markers.length} posts on map',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                     ),
+                    const Spacer(),
                     if (_selectedFilter != null)
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           color: AppColors.primary,
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
                           '#$_selectedFilter',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
+                          style: const TextStyle(color: Colors.white, fontSize: 12),
                         ),
                       ),
                   ],
@@ -308,63 +260,27 @@ class _MapViewScreenState extends ConsumerState<MapViewScreen> {
             ),
           ),
 
-          // Location button
+          // My location FAB
           Positioned(
             bottom: 24,
             right: 16,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                FloatingActionButton(
-                  heroTag: 'my_location',
-                  onPressed: _centerOnUserLocation,
-                  backgroundColor: Colors.white,
-                  child: _isLoadingLocation
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(
-                          Icons.my_location,
-                          color: AppColors.primary,
-                        ),
-                ),
-              ],
+            child: FloatingActionButton(
+              heroTag: 'map_my_location',
+              onPressed: _getCurrentLocation,
+              backgroundColor: Colors.white,
+              elevation: 4,
+              child: _isLoadingLocation
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppColors.primary),
+                    )
+                  : const Icon(Icons.my_location, color: AppColors.primary),
             ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildStatItem(IconData icon, String value, String label) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 20, color: AppColors.primary),
-            const SizedBox(width: 4),
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            color: AppColors.textSecondary,
-          ),
-        ),
-      ],
     );
   }
 }

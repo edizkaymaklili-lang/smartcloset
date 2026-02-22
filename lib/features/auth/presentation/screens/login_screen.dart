@@ -38,14 +38,110 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     ref.read(authProvider.notifier).signInWithGoogle();
   }
 
+  void _showForgotPassword() {
+    final controller = TextEditingController(text: _emailController.text.trim());
+    bool sending = false;
+    String? message;
+    bool success = false;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Reset Password'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Enter your email and we\'ll send a reset link.',
+                style: TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  prefixIcon: Icon(Icons.email_outlined),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              if (message != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  message!,
+                  style: TextStyle(
+                    color: success ? AppColors.success : AppColors.error,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: sending || success
+                  ? null
+                  : () async {
+                      final email = controller.text.trim();
+                      if (email.isEmpty || !email.contains('@')) {
+                        setDialogState(() {
+                          message = 'Please enter a valid email.';
+                          success = false;
+                        });
+                        return;
+                      }
+                      setDialogState(() => sending = true);
+                      final error = await ref
+                          .read(authProvider.notifier)
+                          .sendPasswordResetEmail(email);
+                      setDialogState(() {
+                        sending = false;
+                        message = error ?? 'Reset link sent! Check your inbox.';
+                        success = error == null;
+                      });
+                    },
+              child: sending
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Send Link'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
 
-    // Navigate on success
+    // Navigate on success (handles both direct login and redirect return)
+    if (authState.isAuthenticated) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          if (!authState.emailVerified && authState.email != null) {
+            context.go('/verify-email');
+          } else {
+            context.go('/recommendations');
+          }
+        }
+      });
+    }
     ref.listen(authProvider, (prev, next) {
       if (next.isAuthenticated) {
-        context.go('/recommendations');
+        if (!next.emailVerified && next.email != null) {
+          context.go('/verify-email');
+        } else {
+          context.go('/recommendations');
+        }
       }
     });
 
@@ -155,6 +251,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               },
                             ),
                           ],
+                        ),
+                      ),
+
+                      // ─── Forgot Password ───
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: _showForgotPassword,
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 0, vertical: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: Text(
+                            'Forgot Password?',
+                            style: TextStyle(
+                              color: AppColors.primary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ),
                       ),
 
