@@ -3,7 +3,7 @@ import 'package:stil_asist/main.dart';
 
 void main() {
   testWidgets('App launches smoke test', (WidgetTester tester) async {
-    await tester.pumpWidget(const StilAsistApp());
-    expect(find.text('Stil Asist'), findsWidgets);
+    await tester.pumpWidget(const SmartClosetApp());
+    expect(find.text('Smart Closet'), findsWidgets);
   });
 }

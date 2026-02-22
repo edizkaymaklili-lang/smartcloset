@@ -50,7 +50,7 @@ void main() async {
     runApp(
       UncontrolledProviderScope(
         container: container,
-        child: const StilAsistApp(),
+        child: const SmartClosetApp(),
       ),
     );
 
@@ -94,14 +94,14 @@ Future<void> _initFirebaseInBackground(ProviderContainer container) async {
   }
 }
 
-class StilAsistApp extends ConsumerWidget {
-  const StilAsistApp({super.key});
+class SmartClosetApp extends ConsumerWidget {
+  const SmartClosetApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider).asData?.value ?? ThemeMode.system;
     return MaterialApp.router(
-      title: 'Stil Asist',
+      title: 'Smart Closet',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,

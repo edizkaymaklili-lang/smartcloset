@@ -2,7 +2,7 @@ class AppStrings {
   AppStrings._();
 
   // App
-  static const String appName = 'Stil Asist';
+  static const String appName = 'Smart Closet';
   static const String appTagline = 'Your Personal Weather Style Assistant';
 
   // Navigation

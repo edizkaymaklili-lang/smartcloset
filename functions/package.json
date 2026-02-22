@@ -1,7 +1,7 @@
 {
   "name": "stil-asist-functions",
   "version": "1.0.0",
-  "description": "Firebase Cloud Functions for Stil Asist — Gemini AI outfit recommendations",
+  "description": "Firebase Cloud Functions for Smart Closet — Gemini AI outfit recommendations",
   "main": "index.js",
   "engines": {
     "node": "20"

@@ -1,10 +1,10 @@
-# 🚀 Stil Asist - Hızlı Başlangıç Rehberi
+# 🚀 Smart Closet - Hızlı Başlangıç Rehberi
 
 ## ✅ Kurulum Checklist
 
 ### 1️⃣ Firebase Projesi (5 dakika)
 - [ ] [Firebase Console](https://console.firebase.google.com) aç
-- [ ] "Add project" → İsim: **Stil Asist**
+- [ ] "Add project" → İsim: **Smart Closet**
 - [ ] Google Analytics aktif et
 - [ ] Proje oluşturuldu ✅
 
@@ -61,7 +61,7 @@
 
 ### Terminal Komutları:
 ```bash
-cd "C:\Users\DeboMac\Documents\GitHub\Stil Asist"
+cd "C:\Users\DeboMac\Documents\GitHub\Smart Closet"
 flutter clean
 flutter pub get
 flutter run

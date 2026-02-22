@@ -1,0 +1,68 @@
+{
+  "project_info": {
+    "project_number": "203315352795",
+    "project_id": "smartcloset-95789",
+    "storage_bucket": "smartcloset-95789.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:203315352795:android:024fe14b6ffac7f60268fe",
+        "android_client_info": {
+          "package_name": "com.example.stil_asist"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "203315352795-fumqqtja1caricbjjdc44pekddb4iv5c.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDLapgbcVq35Diga84GcpwWL8IYxEa2ZTg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "203315352795-fumqqtja1caricbjjdc44pekddb4iv5c.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:203315352795:android:f37be4d46bf755070268fe",
+        "android_client_info": {
+          "package_name": "com.stilasist.stil_asist"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "203315352795-fumqqtja1caricbjjdc44pekddb4iv5c.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDLapgbcVq35Diga84GcpwWL8IYxEa2ZTg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "203315352795-fumqqtja1caricbjjdc44pekddb4iv5c.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

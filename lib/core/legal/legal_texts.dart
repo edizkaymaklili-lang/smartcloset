@@ -1,9 +1,9 @@
-/// All legal document texts for Stil Asist.
+/// All legal document texts for Smart Closet.
 /// Effective date: February 2026
 class LegalTexts {
   LegalTexts._();
 
-  static const String appName = 'Stil Asist';
+  static const String appName = 'Smart Closet';
   static const String companyEmail = 'legal@stilasist.app';
   static const String effectiveDate = 'February 14, 2026';
 

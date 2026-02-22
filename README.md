@@ -1,4 +1,4 @@
-# Stil Asist 👗
+# Smart Closet 👗
 
 **Weather-based style assistant for women** - A Flutter mobile application that provides personalized outfit recommendations based on weather conditions, personal style preferences, and wardrobe items.
 

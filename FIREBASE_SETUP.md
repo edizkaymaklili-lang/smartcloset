@@ -1,4 +1,4 @@
-# Firebase Setup Guide - Stil Asist
+# Firebase Setup Guide - Smart Closet
 
 ## 📋 Required Services
 - ✅ Firebase Authentication
@@ -13,7 +13,7 @@
 
 1. Go to [Firebase Console](https://console.firebase.google.com)
 2. Click "Add project"
-3. Project name: **Stil Asist** (or your preferred name)
+3. Project name: **Smart Closet** (or your preferred name)
 4. Enable Google Analytics: **Yes** (recommended)
 5. Choose Analytics account or create new
 6. Click "Create project" ⏳ (takes ~1 minute)
@@ -25,7 +25,7 @@
 1. In project overview, click Android icon
 2. Android package name: `com.example.stil_asist`
    - Find in: `android/app/build.gradle` → `applicationId`
-3. App nickname: **Stil Asist Android**
+3. App nickname: **Smart Closet Android**
 4. Debug signing certificate (optional for now)
 5. Click "Register app"
 6. **Download `google-services.json`**
@@ -175,12 +175,12 @@ firebase login
 
 ### Initialize Functions:
 ```bash
-cd "C:\Users\DeboMac\Documents\GitHub\Stil Asist"
+cd "C:\Users\DeboMac\Documents\GitHub\Smart Closet"
 firebase init functions
 ```
 
 **Choices:**
-- Use existing project: **Stil Asist**
+- Use existing project: **Smart Closet**
 - Language: **JavaScript**
 - ESLint: **No** (or Yes, your choice)
 - Install dependencies: **Yes**
@@ -233,7 +233,7 @@ The function code is already in `functions/index.js` (we'll create this next).
 
 ### Run flutter commands:
 ```bash
-cd "C:\Users\DeboMac\Documents\GitHub\Stil Asist"
+cd "C:\Users\DeboMac\Documents\GitHub\Smart Closet"
 flutter clean
 flutter pub get
 flutter run

@@ -348,7 +348,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ListTile(
                   leading: const Icon(Icons.info_outline,
                       color: AppColors.textSecondary),
-                  title: const Text('About Stil Asist'),
+                  title: const Text('About Smart Closet'),
                   subtitle: const Text('Version 1.0.0'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {},

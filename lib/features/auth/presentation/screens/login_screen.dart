@@ -175,7 +175,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                       // ─── Title ───
                       Text(
-                        'Stil Asist',
+                        'Smart Closet',
                         style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                               fontWeight: FontWeight.bold,
                               color: AppColors.primary,

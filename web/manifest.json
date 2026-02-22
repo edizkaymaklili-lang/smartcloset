@@ -1,6 +1,6 @@
 {
-    "name": "stil_asist",
-    "short_name": "stil_asist",
+    "name": "Smart Closet",
+    "short_name": "Smart Closet",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

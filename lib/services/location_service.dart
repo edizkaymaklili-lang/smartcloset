@@ -80,7 +80,7 @@ class LocationService {
           'addressdetails': 1,
         },
         options: Options(headers: {
-          if (!kIsWeb) 'User-Agent': 'StilAsist/1.0',
+          if (!kIsWeb) 'User-Agent': 'SmartCloset/1.0',
           'Accept-Language': 'en',
         }),
       );

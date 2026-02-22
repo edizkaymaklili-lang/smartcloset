@@ -279,7 +279,7 @@ class StylePostCard extends ConsumerWidget {
                 const SizedBox(width: 16),
                 InkWell(
                   onTap: () {
-                    final shareText = '${post.userDisplayName} shared a style on Stil Asist!\n\n'
+                    final shareText = '${post.userDisplayName} shared a style on Smart Closet!\n\n'
                         '${post.description ?? ""}\n\n'
                         '${post.location != null ? "📍 ${post.location!.city}\n" : ""}'
                         'Check it out: https://smartcloset-95789.web.app';
