@@ -1,19 +1,29 @@
 enum ClothingCategory {
   tops,
   bottoms,
+  skirts,
+  dresses,
   outerwear,
+  suits,
+  sportswear,
+  swimwear,
   shoes,
-  accessories,
-  dresses;
+  bags,
+  accessories;
 
   String get displayName {
     return switch (this) {
       ClothingCategory.tops => 'Tops',
       ClothingCategory.bottoms => 'Bottoms',
-      ClothingCategory.outerwear => 'Outerwear',
-      ClothingCategory.shoes => 'Shoes',
-      ClothingCategory.accessories => 'Accessories',
+      ClothingCategory.skirts => 'Skirts',
       ClothingCategory.dresses => 'Dresses',
+      ClothingCategory.outerwear => 'Outerwear',
+      ClothingCategory.suits => 'Suits & Blazers',
+      ClothingCategory.sportswear => 'Sportswear',
+      ClothingCategory.swimwear => 'Swimwear',
+      ClothingCategory.shoes => 'Shoes',
+      ClothingCategory.bags => 'Bags',
+      ClothingCategory.accessories => 'Accessories',
     };
   }
 
@@ -21,10 +31,15 @@ enum ClothingCategory {
     return switch (this) {
       ClothingCategory.tops => '👚',
       ClothingCategory.bottoms => '👖',
-      ClothingCategory.outerwear => '🧥',
-      ClothingCategory.shoes => '👠',
-      ClothingCategory.accessories => '💍',
+      ClothingCategory.skirts => '🩱',
       ClothingCategory.dresses => '👗',
+      ClothingCategory.outerwear => '🧥',
+      ClothingCategory.suits => '🤵',
+      ClothingCategory.sportswear => '🎽',
+      ClothingCategory.swimwear => '👙',
+      ClothingCategory.shoes => '👠',
+      ClothingCategory.bags => '👜',
+      ClothingCategory.accessories => '💍',
     };
   }
 }

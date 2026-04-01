@@ -73,7 +73,9 @@
       "Bash(flutter clean:*)",
       "Bash(del \"c:\\\\Users\\\\DeboMac\\\\Documents\\\\GitHub\\\\Stil Asist\\\\lib\\\\services\\\\ai_recommendation_service.dart\")",
       "WebFetch(domain:geocoding-api.open-meteo.com)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(python:*)",
+      "Bash(dart pub deps)"
     ],
     "additionalDirectories": [
       "C:\\Users\\DeboMac\\AppData\\Local\\Temp\\claude\\c--Users-DeboMac-Documents-GitHub-Stil-Asist\\tasks"

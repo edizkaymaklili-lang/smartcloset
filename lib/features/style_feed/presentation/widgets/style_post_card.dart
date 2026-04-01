@@ -8,7 +8,6 @@ import '../../../../core/constants/app_colors.dart';
 import '../../domain/entities/style_post.dart';
 import '../providers/style_feed_provider.dart';
 import '../../../profile/presentation/providers/follow_provider.dart';
-import '../../../auth/presentation/providers/auth_provider.dart';
 
 class StylePostCard extends ConsumerWidget {
   final StylePost post;
@@ -68,7 +67,9 @@ class StylePostCard extends ConsumerWidget {
                       : null,
                   child: post.userAvatar == null
                       ? Text(
-                          post.userDisplayName[0].toUpperCase(),
+                          post.userDisplayName.isNotEmpty
+                              ? post.userDisplayName[0].toUpperCase()
+                              : '?',
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,

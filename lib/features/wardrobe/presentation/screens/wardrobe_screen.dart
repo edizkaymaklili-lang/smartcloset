@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +10,7 @@ import '../../domain/entities/clothing_item.dart';
 import '../providers/wardrobe_provider.dart';
 import '../widgets/wardrobe_stats_card.dart';
 import '../widgets/clothing_detail_modal.dart';
+import '../../../../services/tips_service.dart';
 
 class WardrobeScreen extends ConsumerStatefulWidget {
   const WardrobeScreen({super.key});
@@ -51,10 +53,32 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
   String? _filterType; // 'favorites', 'rarely-worn', 'new'
   String? _selectedColor;
   SortOption _sortOption = SortOption.newestFirst;
+  bool _tipScheduled = false;
+
+  void _maybeShowTip(List items) {
+    if (_tipScheduled || items.isEmpty) return;
+    _tipScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      if (await TipsService.shouldShow('wardrobe_longpress')) {
+        await TipsService.markShown('wardrobe_longpress');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Tap an item to view details · Long press to remove it'),
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final items = ref.watch(wardrobeProvider);
+    _maybeShowTip(items);
 
     // Apply filters
     var filtered = items;
@@ -256,9 +280,19 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
         children: [
           if (items.isNotEmpty)
             FloatingActionButton(
+              heroTag: 'style_board',
+              onPressed: () => context.push('/wardrobe/style-board'),
+              backgroundColor: AppColors.surface,
+              tooltip: 'Style Board',
+              child: const Icon(Icons.dashboard_customize_outlined, color: AppColors.primary),
+            ),
+          if (items.isNotEmpty) const SizedBox(height: 12),
+          if (items.isNotEmpty)
+            FloatingActionButton(
               heroTag: 'try_on',
               onPressed: () => context.push('/wardrobe/try-on'),
               backgroundColor: AppColors.surface,
+              tooltip: 'Virtual Try-On',
               child: const Icon(Icons.accessibility_new, color: AppColors.primary),
             ),
           if (items.isNotEmpty) const SizedBox(height: 12),
@@ -438,12 +472,19 @@ class _ClothingCard extends StatelessWidget {
     if (item.storageImageUrl != null && item.storageImageUrl!.isNotEmpty) {
       return Container(
         color: AppColors.primaryLight.withValues(alpha: 0.1),
-        child: Image.network(
-          item.storageImageUrl!,
+        child: CachedNetworkImage(
+          imageUrl: item.storageImageUrl!,
           fit: BoxFit.contain,
           width: double.infinity,
           height: double.infinity,
-          errorBuilder: (ctx, e, st) => _iconFallback(),
+          placeholder: (ctx, url) => const Center(
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
+          errorWidget: (ctx, url, e) => _iconFallback(),
         ),
       );
     }
@@ -495,22 +536,22 @@ class _EmptyState extends StatelessWidget {
                   color: AppColors.textSecondary,
                 ),
           ),
-          if (!hasItems) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Add your clothing items to get\npersonalized outfit recommendations',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textHint,
-                  ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: onAdd,
-              icon: const Icon(Icons.add),
-              label: const Text('Add First Item'),
-            ),
-          ],
+          const SizedBox(height: 8),
+          Text(
+            hasItems
+                ? 'Try a different filter or add new items in this category'
+                : 'Add your clothing items to get\npersonalized outfit recommendations',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppColors.textHint,
+                ),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: onAdd,
+            icon: const Icon(Icons.add),
+            label: Text(hasItems ? 'Add Item' : 'Add First Item'),
+          ),
         ],
       ),
     );

@@ -93,6 +93,11 @@ class _StyleFeedScreenState extends ConsumerState<StyleFeedScreen>
           ],
         ),
         actions: [
+          IconButton(
+            onPressed: () => context.push('/contest'),
+            icon: const Icon(Icons.emoji_events_outlined),
+            tooltip: 'Daily Style Contest',
+          ),
           if (_currentTabIndex != 2)
             IconButton(
               onPressed: () => context.push('/style-feed/map'),
@@ -124,7 +129,7 @@ class _StyleFeedScreenState extends ConsumerState<StyleFeedScreen>
 
   Widget _buildPostsContent(StyleFeedState feedState) {
     if (feedState.isLoading && feedState.posts.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const _FeedSkeleton();
     }
 
     if (feedState.errorMessage != null && feedState.posts.isEmpty) {
@@ -189,7 +194,8 @@ class _StyleFeedScreenState extends ConsumerState<StyleFeedScreen>
             final query = _searchQuery.toLowerCase();
             return post.userDisplayName.toLowerCase().contains(query) ||
                    (post.description?.toLowerCase().contains(query) ?? false) ||
-                   (post.location?.city.toLowerCase().contains(query) ?? false);
+                   (post.location?.city.toLowerCase().contains(query) ?? false) ||
+                   post.tags.any((tag) => tag.toLowerCase().contains(query));
           }).toList();
 
     return Column(
@@ -200,7 +206,7 @@ class _StyleFeedScreenState extends ConsumerState<StyleFeedScreen>
           child: TextField(
             controller: _searchController,
             decoration: InputDecoration(
-              hintText: 'Search posts, users, locations...',
+              hintText: 'Search posts, users, locations, tags...',
               prefixIcon: const Icon(Icons.search),
               suffixIcon: _searchQuery.isNotEmpty
                   ? IconButton(
@@ -508,6 +514,94 @@ class _NearbyMapViewState extends ConsumerState<_NearbyMapView> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _FeedSkeleton extends StatefulWidget {
+  const _FeedSkeleton();
+
+  @override
+  State<_FeedSkeleton> createState() => _FeedSkeletonState();
+}
+
+class _FeedSkeletonState extends State<_FeedSkeleton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+    _animation = Tween<double>(begin: 0.3, end: 0.7).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Widget _box(double height, {double? width, double radius = 8}) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (_, _) => Container(
+        height: height,
+        width: width ?? double.infinity,
+        decoration: BoxDecoration(
+          color: Colors.grey.withValues(alpha: _animation.value),
+          borderRadius: BorderRadius.circular(radius),
+        ),
+      ),
+    );
+  }
+
+  Widget _card() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row: avatar + name
+          Row(
+            children: [
+              _box(40, width: 40, radius: 20),
+              const SizedBox(width: 10),
+              Expanded(child: _box(14, width: 120)),
+              const Spacer(),
+              _box(14, width: 50),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Photo placeholder
+          _box(280, radius: 16),
+          const SizedBox(height: 10),
+          // Action row
+          Row(
+            children: [
+              _box(20, width: 60),
+              const SizedBox(width: 16),
+              _box(20, width: 60),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _box(12, width: 200),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      physics: const NeverScrollableScrollPhysics(),
+      children: [_card(), _card(), _card()],
     );
   }
 }

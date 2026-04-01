@@ -22,5 +22,10 @@ nul
 # Firebase
 .firebase/
 
+# Android signing — NEVER commit these
+android/key.properties
+android/app/*.jks
+android/app/*.keystore
+
 # Claude
 .claude/sessions/

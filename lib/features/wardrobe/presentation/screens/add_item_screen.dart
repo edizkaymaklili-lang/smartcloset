@@ -1,8 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
@@ -12,6 +15,7 @@ import '../../domain/entities/clothing_item.dart';
 import '../../../../services/storage_service.dart';
 import '../../../../services/settings_service.dart';
 import '../../../../services/background_removal_service.dart';
+import '../../../../services/gemini_service.dart';
 import '../providers/wardrobe_provider.dart';
 import '../../../style_feed/presentation/providers/style_feed_provider.dart';
 
@@ -31,6 +35,7 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
   final _storage = StorageService();
   final _settingsService = SettingsService();
   final _backgroundRemovalService = BackgroundRemovalService();
+  final _geminiService = GeminiService();
   final _picker = ImagePicker();
 
   dynamic _imageFile; // XFile on web, File on mobile
@@ -39,6 +44,7 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
   final Set<String> _occasions = {};
   final Set<String> _weatherSuitability = {};
   bool _saving = false;
+  bool _aiAnalyzing = false;
 
   static const _seasonOptions = ['Spring', 'Summer', 'Autumn', 'Winter'];
   static const _occasionOptions = ['Office', 'Casual', 'Night'];
@@ -53,9 +59,10 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
       _nameController.text = item.name;
       _colorController.text = item.color;
       _category = item.category;
-      _seasons.addAll(item.seasons.map((s) => s.toLowerCase()));
-      _occasions.addAll(item.occasions.map((o) => o.toLowerCase()));
-      _weatherSuitability.addAll(item.weatherSuitability.map((w) => w.toLowerCase()));
+      // Capitalize first letter to match FilterChip option labels (e.g. "spring" → "Spring")
+      _seasons.addAll(item.seasons.map(_capitalize));
+      _occasions.addAll(item.occasions.map(_capitalize));
+      _weatherSuitability.addAll(item.weatherSuitability.map(_capitalize));
     }
   }
 
@@ -69,94 +76,215 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
   Future<void> _pickImage(ImageSource source) async {
     final picked = await _picker.pickImage(
       source: source,
-      maxWidth: 1080,
-      maxHeight: 1080,
-      imageQuality: 85,
+      maxWidth: 800,
+      maxHeight: 800,
+      imageQuality: 75,
     );
-    if (picked != null) {
-      // Check if background removal is enabled
-      final bgRemovalEnabled = await _settingsService.getBackgroundRemovalEnabled();
+    if (picked == null) return;
 
-      if (bgRemovalEnabled) {
-        // Show processing dialog
-        if (mounted) {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (context) => const AlertDialog(
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Removing background...'),
-                ],
-              ),
+    final bgEnabled = await _settingsService.getBackgroundRemovalEnabled();
+    final removeBgKey = await _settingsService.getRemoveBgApiKey();
+
+    Uint8List? processedBytes;
+    final imageBytes = await picked.readAsBytes();
+
+    // Process if background removal is enabled.
+    // On web, only process when we have an API key (no blocking local algo).
+    final shouldProcess = bgEnabled && (!kIsWeb || removeBgKey.isNotEmpty);
+
+    if (shouldProcess) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => const AlertDialog(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Removing background...', textAlign: TextAlign.center),
+              ],
             ),
-          );
-        }
+          ),
+        );
+        // Yield to event loop so dialog route is pushed before we await work
+        await Future.delayed(Duration.zero);
+      }
+      try {
+        processedBytes = await _backgroundRemovalService.removeBackgroundAsync(
+          imageFile: picked,
+          apiKey: removeBgKey,
+          cachedBytes: imageBytes,
+        ).timeout(const Duration(seconds: 10));
+      } catch (_) {}
 
-        try {
-          final apiKey = await _settingsService.getRemoveBgApiKey();
-          final processedBytes = await _backgroundRemovalService.removeBackground(
-            imageFile: picked,
-            apiKey: apiKey, // empty = free local algorithm
-          );
+      if (!mounted) return;
+      Navigator.pop(context);
+    }
 
-          if (mounted) Navigator.pop(context); // Close dialog
+    // Apply image (processed or original).
+    // Processed bytes are always PNG; original bytes keep the source format.
+    final finalBytes = processedBytes ?? imageBytes;
+    if (kIsWeb) {
+      final baseName = picked.name.replaceAll(RegExp(r'\.\w+$'), '');
+      final isProcessed = processedBytes != null;
+      final mimeType = isProcessed ? 'image/png' : (picked.mimeType ?? 'image/jpeg');
+      final ext = mimeType.contains('png') ? 'png' : 'jpg';
+      setState(() {
+        _imageFile = XFile.fromData(
+          finalBytes,
+          name: '$baseName.$ext',
+          mimeType: mimeType,
+        );
+      });
+    } else {
+      // Delete previous temp file before creating a new one
+      await _deleteTempFile(_imageFile);
+      final tempFile = await _saveProcessedImage(finalBytes);
+      if (mounted) setState(() => _imageFile = tempFile);
+    }
 
-          if (kIsWeb) {
-            setState(() {
-              _imageFile = XFile.fromData(
-                processedBytes,
-                name: 'processed_${picked.name}',
-                mimeType: 'image/png',
-              );
-            });
-          } else {
-            final tempFile = await _saveProcessedImage(processedBytes);
-            setState(() => _imageFile = tempFile);
-          }
+    // Fire AI analysis in background — don't await so the image shows immediately.
+    // Uses original imageBytes for best colour/detail recognition.
+    unawaited(_autoFillFromGemini(imageBytes));
+  }
 
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Background removed!'),
-                backgroundColor: AppColors.success,
-                duration: Duration(seconds: 2),
-              ),
-            );
-          }
-        } catch (e) {
-          if (mounted) {
-            Navigator.pop(context); // Close dialog
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Background removal failed: $e'),
-                backgroundColor: AppColors.error,
-                duration: const Duration(seconds: 3),
-              ),
-            );
-          }
-          // Use original image as fallback
-          setState(() {
-            _imageFile = kIsWeb ? picked : File(picked.path);
-          });
-        }
+  /// Calls Gemini Vision to auto-fill name, colour and category.
+  /// Only fills fields that the user hasn't typed into yet.
+  Future<void> _autoFillFromGemini(Uint8List imageBytes) async {
+    final geminiKey = await _settingsService.getGeminiApiKey();
+    if (geminiKey.isEmpty || !mounted) return;
+
+    setState(() => _aiAnalyzing = true);
+    try {
+      final analysis = await _geminiService
+          .analyzeClothing(imageBytes, geminiKey)
+          .timeout(const Duration(seconds: 20));
+
+      if (!mounted) return;
+      setState(() {
+        if (_nameController.text.isEmpty) _nameController.text = analysis.name;
+        if (_colorController.text.isEmpty) _colorController.text = analysis.color;
+        _category = _mapCategory(analysis.category);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✨ AI filled in the details — review and edit if needed'),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    } catch (_) {
+      // Gemini failed — user fills manually, no error shown
+    } finally {
+      if (mounted) setState(() => _aiAnalyzing = false);
+    }
+  }
+
+  /// Maps Gemini's category string to [ClothingCategory].
+  ClothingCategory _mapCategory(String raw) {
+    return switch (raw.toLowerCase().trim()) {
+      'tops' => ClothingCategory.tops,
+      'bottoms' => ClothingCategory.bottoms,
+      'skirts' => ClothingCategory.skirts,
+      'dresses' => ClothingCategory.dresses,
+      'outerwear' => ClothingCategory.outerwear,
+      'suits' => ClothingCategory.suits,
+      'sportswear' => ClothingCategory.sportswear,
+      'swimwear' => ClothingCategory.swimwear,
+      'shoes' => ClothingCategory.shoes,
+      'bags' => ClothingCategory.bags,
+      'accessories' => ClothingCategory.accessories,
+      _ => ClothingCategory.tops,
+    };
+  }
+
+  /// Opens the crop/rotate editor on the currently selected image.
+  Future<void> _cropCurrentImage() async {
+    if (_imageFile == null || !mounted) return;
+
+    try {
+      String sourcePath;
+      if (kIsWeb) {
+        // Web: XFile.fromData has empty path — encode bytes as base64 data URL.
+        // Blob URLs are preferred but require dart:html; data URLs work for
+        // typical wardrobe images (<2 MB after picker compression).
+        final bytes = await (_imageFile as XFile).readAsBytes();
+        final b64 = base64Encode(bytes);
+        sourcePath = 'data:image/png;base64,$b64';
       } else {
-        // No background removal, use original image
+        sourcePath = (_imageFile as File).path;
+      }
+
+      if (!mounted) return;
+      final uiSettings = <PlatformUiSettings>[
+        AndroidUiSettings(
+          toolbarTitle: 'Crop & Rotate',
+          toolbarColor: AppColors.primary,
+          toolbarWidgetColor: Colors.white,
+          initAspectRatio: CropAspectRatioPreset.original,
+          lockAspectRatio: false,
+        ),
+        IOSUiSettings(title: 'Crop & Rotate'),
+        WebUiSettings(
+          context: context,
+          presentStyle: WebPresentStyle.dialog,
+          zoomable: true,
+        ),
+      ];
+      final cropped = await ImageCropper().cropImage(
+        sourcePath: sourcePath,
+        uiSettings: uiSettings,
+      );
+
+      if (cropped == null || !mounted) return;
+
+      final croppedBytes = await cropped.readAsBytes();
+      if (kIsWeb) {
         setState(() {
-          _imageFile = kIsWeb ? picked : File(picked.path);
+          _imageFile = XFile.fromData(
+            croppedBytes,
+            name: 'cropped.png',
+            mimeType: 'image/png',
+          );
         });
+      } else {
+        final oldFile = _imageFile;
+        final savedFile = await _saveProcessedImage(croppedBytes);
+        await _deleteTempFile(oldFile);
+        if (mounted) setState(() => _imageFile = savedFile);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Crop failed: $e'),
+            backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 4),
+          ),
+        );
       }
     }
   }
+
+  static String _capitalize(String s) =>
+      s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1).toLowerCase()}';
 
   Future<File> _saveProcessedImage(Uint8List bytes) async {
     final tempDir = await getApplicationDocumentsDirectory();
     final tempFile = File('${tempDir.path}/temp_${DateTime.now().millisecondsSinceEpoch}.png');
     await tempFile.writeAsBytes(bytes);
     return tempFile;
+  }
+
+  /// Deletes a temporary image file created by [_saveProcessedImage].
+  /// Safe to call with null or non-File values; silently ignores errors.
+  Future<void> _deleteTempFile(dynamic imageFile) async {
+    if (kIsWeb || imageFile is! File) return;
+    try {
+      await imageFile.delete();
+    } catch (_) {}
   }
 
   Widget _buildImagePreview() {
@@ -210,6 +338,29 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            // White background tip
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF8E1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFFD54F)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.tips_and_updates_outlined, color: Color(0xFFF9A825), size: 18),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'For best results, photograph your clothing on a white or plain background.',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF5D4037)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
             ListTile(
               leading: const CircleAvatar(
                 backgroundColor: AppColors.primaryLight,
@@ -248,12 +399,14 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
       final isEditing = widget.itemToEdit != null;
       final id = isEditing ? widget.itemToEdit!.id : const Uuid().v4();
       final userId = ref.read(currentUserIdProvider);
+      if (userId.isEmpty) throw Exception('Not logged in');
 
       String? localPath = isEditing ? widget.itemToEdit!.localImagePath : null;
       String? storageUrl = isEditing ? widget.itemToEdit!.storageImageUrl : null;
 
       // Save new image if selected
       if (_imageFile != null) {
+        final savedImageFile = _imageFile;
         final result = await _storage.saveImage(
           imageFile: _imageFile!,
           userId: userId,
@@ -261,6 +414,8 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
         );
         localPath = result.localPath;
         storageUrl = result.firebaseUrl;
+        // Clean up the temporary file now that it's been copied to the wardrobe dir
+        await _deleteTempFile(savedImageFile);
       }
 
       final item = ClothingItem(
@@ -381,23 +536,40 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
               ),
             ),
             if (_imageFile != null)
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: _showImageSourceSheet,
-                  icon: const Icon(Icons.edit, size: 16),
-                  label: const Text('Change Photo'),
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton.icon(
+                    onPressed: _cropCurrentImage,
+                    icon: const Icon(Icons.crop, size: 16),
+                    label: const Text('Crop & Rotate'),
+                  ),
+                  TextButton.icon(
+                    onPressed: _showImageSourceSheet,
+                    icon: const Icon(Icons.edit, size: 16),
+                    label: const Text('Change Photo'),
+                  ),
+                ],
               ),
             const SizedBox(height: 20),
 
             // Name field
             TextFormField(
               controller: _nameController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Item Name *',
                 hintText: 'e.g. White Linen Blouse',
-                prefixIcon: Icon(Icons.label_outline),
+                prefixIcon: const Icon(Icons.label_outline),
+                suffixIcon: _aiAnalyzing
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : null,
               ),
               textCapitalization: TextCapitalization.words,
               validator: (v) =>

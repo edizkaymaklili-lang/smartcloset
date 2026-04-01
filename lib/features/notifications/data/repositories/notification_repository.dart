@@ -45,13 +45,19 @@ class NotificationRepository {
     return _firestore
         .collection('notifications')
         .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
         .limit(50)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => AppNotification.fromFirestore(doc))
-          .toList();
+      final results = <AppNotification>[];
+      for (final doc in snapshot.docs) {
+        try {
+          results.add(AppNotification.fromFirestore(doc));
+        } catch (e) {
+          debugPrint('Skipping malformed notification ${doc.id}: $e');
+        }
+      }
+      results.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return results;
     });
   }
 

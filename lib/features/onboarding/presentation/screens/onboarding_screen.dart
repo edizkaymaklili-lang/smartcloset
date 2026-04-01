@@ -61,6 +61,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     context.go('/recommendations');
   }
 
+  void _previousPage() {
+    if (_currentPage > 0) {
+      _pageController.previousPage(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
   void _nextPage() {
     if (_currentPage < _totalPages - 1) {
       _pageController.nextPage(
@@ -81,19 +90,27 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Smart Closet',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
+                  if (_currentPage > 0)
+                    IconButton(
+                      onPressed: _previousPage,
+                      icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    )
+                  else
+                    Text(
+                      'Smart Closet',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
+                      ),
                     ),
-                  ),
+                  const Spacer(),
                   if (_currentPage < _totalPages - 1)
                     TextButton(
                       onPressed: () => context.go('/recommendations'),
-                      child: const Text('Atla'),
+                      child: const Text('Skip'),
                     ),
                 ],
               ),
@@ -164,7 +181,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: _nextPage,
-                  child: Text(_currentPage == _totalPages - 1 ? 'Başla' : 'Devam'),
+                  child: Text(_currentPage == _totalPages - 1 ? 'Get Started' : 'Continue'),
                 ),
               ),
             ),
@@ -195,14 +212,14 @@ class _StyleSelectionPage extends StatelessWidget {
         children: [
           const SizedBox(height: 16),
           Text(
-            'Stilini Belirle',
+            'Your Style',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Seni en iyi tanımlayan stili seç.',
+            'Pick the style that best describes you.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: AppColors.textSecondary,
             ),
@@ -351,14 +368,14 @@ class _BodyTypePage extends StatelessWidget {
           children: [
             const SizedBox(height: 16),
             Text(
-              'Vücut Tipini Seç',
+              'Your Body Type',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Sana en uygun kesimleri önerelim.',
+              'Help us recommend the best cuts for you.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: AppColors.textSecondary,
               ),
@@ -416,7 +433,7 @@ class _BodyTypePage extends StatelessWidget {
             }),
             const SizedBox(height: 24),
             Text(
-              'Boy Aralığın',
+              'Your Height Range',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
@@ -483,14 +500,14 @@ class _WorkTypePage extends StatelessWidget {
         children: [
           const SizedBox(height: 16),
           Text(
-            'Çalışma Durumun',
+            'Your Work Style',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Günlük kıyafet ihtiyacını anlayalım.',
+            'Let us understand your daily clothing needs.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: AppColors.textSecondary,
             ),
@@ -577,14 +594,14 @@ class _HobbiesPage extends StatelessWidget {
         children: [
           const SizedBox(height: 16),
           Text(
-            'Hobilerin & Aktivitelerin',
+            'Your Hobbies & Activities',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Yaşam tarzına uygun öneriler sunalım. Birden fazla seçebilirsin.',
+            'Let us suggest outfits to match your lifestyle. Pick as many as you like.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: AppColors.textSecondary,
             ),
@@ -633,7 +650,7 @@ class _HobbiesPage extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                '${selectedHobbies.length} hobi seçildi',
+                '${selectedHobbies.length} selected',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: AppColors.primary,
                   fontWeight: FontWeight.w500,
@@ -666,14 +683,14 @@ class _ColorSeasonPage extends StatelessWidget {
         children: [
           const SizedBox(height: 16),
           Text(
-            'Renk Sezonun',
+            'Your Color Season',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Cilt tonuna en uygun renkleri önerelim.',
+            'We\'ll suggest the most flattering colors for your skin tone.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: AppColors.textSecondary,
             ),

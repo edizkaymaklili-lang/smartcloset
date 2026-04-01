@@ -607,7 +607,17 @@ class _CommentItem extends ConsumerWidget {
                       ),
                     ),
                     const Spacer(),
-                    if (isOwner)
+                    if (isOwner) ...[
+                      IconButton(
+                        onPressed: () => _showEditCommentDialog(
+                          context, ref, postId, comment.id, comment.text,
+                        ),
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        color: AppColors.textSecondary,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                      const SizedBox(width: 4),
                       IconButton(
                         onPressed: () async {
                           final deleteComment = ref.read(deleteCommentProvider);
@@ -621,6 +631,7 @@ class _CommentItem extends ConsumerWidget {
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                       ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -668,4 +679,60 @@ class _CommentItem extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Shows a dialog to edit a comment. Called from _CommentItem.
+void _showEditCommentDialog(
+  BuildContext context,
+  WidgetRef ref,
+  String postId,
+  String commentId,
+  String currentText,
+) {
+  final controller = TextEditingController(text: currentText);
+  showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Edit Comment'),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        maxLines: 4,
+        decoration: const InputDecoration(
+          border: OutlineInputBorder(),
+          hintText: 'Edit your comment...',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () async {
+            final newText = controller.text.trim();
+            if (newText.isEmpty || newText == currentText) {
+              Navigator.pop(ctx);
+              return;
+            }
+            Navigator.pop(ctx);
+            try {
+              await ref.read(editCommentProvider)(
+                postId: postId,
+                commentId: commentId,
+                newText: newText,
+              );
+            } catch (e) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to edit: $e')),
+                );
+              }
+            }
+          },
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
 }

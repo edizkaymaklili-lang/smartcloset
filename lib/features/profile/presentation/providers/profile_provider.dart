@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/enums/body_type.dart';
@@ -8,6 +10,8 @@ import '../../../../core/enums/user_hobby.dart';
 import '../../../../core/enums/work_type.dart';
 import '../../domain/entities/user_profile.dart';
 import '../../../../services/notification_service.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../../main.dart' show firebaseAvailableProvider;
 
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   throw UnimplementedError('Initialize with override in main()');
@@ -83,11 +87,13 @@ class ProfileNotifier extends Notifier<UserProfile> {
   void updateStylePreference(StylePreference style) {
     ref.read(sharedPreferencesProvider).setString(_keyStyle, style.name);
     state = state.copyWith(stylePreference: style);
+    _syncFieldToFirestore('stylePreference', style.name);
   }
 
   void updateName(String name) {
     ref.read(sharedPreferencesProvider).setString(_keyName, name);
     state = state.copyWith(displayName: name);
+    _syncFieldToFirestore('displayName', name);
   }
 
   /// Alias for updateName - used by settings screen
@@ -96,39 +102,58 @@ class ProfileNotifier extends Notifier<UserProfile> {
   void updateCity(String city) {
     ref.read(sharedPreferencesProvider).setString(_keyCity, city);
     state = state.copyWith(city: city);
+    _syncFieldToFirestore('city', city);
   }
 
   void updateBodyType(BodyType bodyType) {
     ref.read(sharedPreferencesProvider).setString(_keyBodyType, bodyType.name);
     state = state.copyWith(bodyType: bodyType);
+    _syncFieldToFirestore('bodyType', bodyType.name);
   }
 
   void updateHeightRange(HeightRange heightRange) {
     ref.read(sharedPreferencesProvider).setString(_keyHeightRange, heightRange.name);
     state = state.copyWith(heightRange: heightRange);
+    _syncFieldToFirestore('heightRange', heightRange.name);
   }
 
   void updateWorkType(WorkType workType) {
     ref.read(sharedPreferencesProvider).setString(_keyWorkType, workType.name);
     state = state.copyWith(workType: workType);
+    _syncFieldToFirestore('workType', workType.name);
   }
 
   void updateHobbies(List<UserHobby> hobbies) {
-    ref.read(sharedPreferencesProvider).setStringList(
-      _keyHobbies,
-      hobbies.map((h) => h.name).toList(),
-    );
+    final names = hobbies.map((h) => h.name).toList();
+    ref.read(sharedPreferencesProvider).setStringList(_keyHobbies, names);
     state = state.copyWith(hobbies: hobbies);
+    _syncFieldToFirestore('hobbies', names);
   }
 
   void updateColorSeason(ColorSeason colorSeason) {
     ref.read(sharedPreferencesProvider).setString(_keyColorSeason, colorSeason.name);
     state = state.copyWith(colorSeason: colorSeason);
+    _syncFieldToFirestore('colorSeason', colorSeason.name);
   }
 
   void updateAvatar(String path) {
     ref.read(sharedPreferencesProvider).setString(_keyAvatarPath, path);
     state = state.copyWith(avatarPath: path);
+    _syncFieldToFirestore('avatarPath', path);
+  }
+
+  /// Syncs a single field to the Firestore user document (best-effort).
+  void _syncFieldToFirestore(String field, dynamic value) {
+    final firebaseReady = ref.read(firebaseAvailableProvider);
+    if (!firebaseReady) return;
+    final userId = ref.read(authProvider).userId;
+    if (userId == null) return;
+    FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .update({field: value}).catchError((Object e) {
+      debugPrint('Profile Firestore sync error ($field): $e');
+    });
   }
 
   Future<void> toggleNotifications(bool enabled) async {

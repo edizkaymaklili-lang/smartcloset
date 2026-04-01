@@ -115,7 +115,7 @@ class StyleFeedRepository {
           .get();
 
       final posts = snapshot.docs
-          .map((doc) => StylePost.fromJson(doc.data() as Map<String, dynamic>))
+          .map((doc) => StylePost.fromJson(doc.data()))
           .where((p) => p.likes >= 3) // Filter by likes client-side
           .toList();
 
@@ -268,6 +268,17 @@ class StyleFeedRepository {
     }
   }
 
+  /// Fetch a single post by ID (used for notification deep-links)
+  Future<StylePost?> getPostById(String postId) async {
+    try {
+      final doc = await _firestore.collection('style_posts').doc(postId).get();
+      if (!doc.exists) return null;
+      return StylePost.fromJson(doc.data()!);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Fetch user's saved posts
   Future<List<StylePost>> fetchSavedPosts(String userId, {int limit = 20}) async {
     try {
@@ -337,7 +348,7 @@ class StyleFeedRepository {
           .get();
 
       final posts = snapshot.docs
-          .map((doc) => StylePost.fromJson(doc.data() as Map<String, dynamic>))
+          .map((doc) => StylePost.fromJson(doc.data()))
           .toList();
       posts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return posts;
@@ -424,6 +435,32 @@ class StyleFeedRepository {
       await docRef.delete();
     } catch (e) {
       throw Exception('Failed to delete comment: ${e.toString()}');
+    }
+  }
+
+  /// Edit a comment's text (owner only)
+  Future<void> editComment(String postId, String commentId, String userId, String newText) async {
+    try {
+      final docRef = _firestore
+          .collection('style_posts')
+          .doc(postId)
+          .collection('comments')
+          .doc(commentId);
+
+      final snapshot = await docRef.get();
+      if (!snapshot.exists) throw Exception('Comment not found');
+
+      final comment = Comment.fromJson(snapshot.data()!);
+      if (comment.userId != userId) {
+        throw Exception('Unauthorized: You can only edit your own comments');
+      }
+
+      await docRef.update({
+        'text': newText.trim(),
+        'editedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      throw Exception('Failed to edit comment: ${e.toString()}');
     }
   }
 

@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../main.dart' show firebaseAvailableProvider;
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../weather/presentation/providers/weather_provider.dart';
+import '../../../../services/subscription_service.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -41,16 +43,21 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     // Wait minimum 800ms for animation
     await Future.delayed(const Duration(milliseconds: 800));
 
-    // Wait up to 5 seconds for Firebase to be ready
-    for (int i = 0; i < 25; i++) {
+    // Wait up to 2 seconds for Firebase to be ready (web initializes fast)
+    for (int i = 0; i < 10; i++) {
       if (!mounted) return;
       final firebaseReady = ref.read(firebaseAvailableProvider);
       if (firebaseReady) break;
       await Future.delayed(const Duration(milliseconds: 200));
     }
 
-    // Wait a bit more for auth state to settle (redirect result, session restore)
-    await Future.delayed(const Duration(milliseconds: 500));
+    // Pre-warm weather provider so the API call starts during the splash
+    // instead of after navigation. Profile is sync (SharedPreferences),
+    // so the city is already available here.
+    if (mounted) ref.read(weatherProvider);
+
+    // Reduced from 300ms — auth state is typically settled by now
+    await Future.delayed(const Duration(milliseconds: 100));
 
     if (!mounted || _navigated) return;
     _navigated = true;
@@ -60,7 +67,15 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       if (!authState.emailVerified && authState.email != null) {
         context.go('/verify-email');
       } else {
-        context.go('/recommendations');
+        // Check subscription status
+        final subService = SubscriptionService();
+        await subService.initialize();
+        if (!mounted) return;
+        if (subService.isSubscribed) {
+          context.go('/recommendations');
+        } else {
+          context.go('/paywall');
+        }
       }
     } else {
       context.go('/login');
@@ -93,23 +108,24 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    width: 100,
-                    height: 100,
+                    width: 110,
+                    height: 110,
                     decoration: BoxDecoration(
-                      color: AppColors.primary,
                       borderRadius: BorderRadius.circular(28),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.primary.withValues(alpha: 0.4),
-                          blurRadius: 24,
-                          offset: const Offset(0, 8),
+                          color: AppColors.primary.withValues(alpha: 0.35),
+                          blurRadius: 28,
+                          offset: const Offset(0, 10),
                         ),
                       ],
                     ),
-                    child: const Icon(
-                      Icons.checkroom_rounded,
-                      size: 52,
-                      color: Colors.white,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(28),
+                      child: Image.asset(
+                        'assets/images/logo.png',
+                        fit: BoxFit.cover,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 24),

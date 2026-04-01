@@ -25,7 +25,7 @@ class StyleBoardNotifier extends Notifier<StyleBoardState> {
         source: ImageSource.gallery,
         maxWidth: 1080,
         maxHeight: 1920,
-        imageQuality: 90,
+        imageQuality: 82,
       );
 
       if (pickedFile != null) {

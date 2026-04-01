@@ -22,10 +22,14 @@ class CollectionNotifier extends AsyncNotifier<List<WardrobeCollection>> {
     final prefs = await SharedPreferences.getInstance();
     final jsonString = prefs.getString(_collectionsKey);
     if (jsonString != null) {
-      final List<dynamic> jsonList = jsonDecode(jsonString);
-      return jsonList
-          .map((json) => WardrobeCollection.fromJson(json))
-          .toList();
+      try {
+        final List<dynamic> jsonList = jsonDecode(jsonString);
+        return jsonList
+            .map((json) => WardrobeCollection.fromJson(json))
+            .toList();
+      } catch (_) {
+        return [];
+      }
     }
     return [];
   }

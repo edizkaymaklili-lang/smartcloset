@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/world_cities.dart';
 import '../../../../core/enums/style_preference.dart';
@@ -26,6 +27,119 @@ class ProfileScreen extends ConsumerStatefulWidget {
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final _picker = ImagePicker();
   Uint8List? _avatarBytes; // for web: holds picked image in memory
+  String? _selectedAvatarEmoji;
+
+  static const _kAvatarEmojiKey = 'profile_avatar_emoji';
+
+  static const _femaleAvatars = [
+    '👩', '👩‍🦰', '👩‍🦱', '👩‍🦳', '👱‍♀️', '🧕',
+    '👸', '🧝‍♀️', '🧚‍♀️', '🧜‍♀️', '🦸‍♀️', '🧙‍♀️',
+    '👩‍🎨', '👩‍💼', '👩‍💻', '👩‍🍳', '🧑‍🎤', '👩‍🌾',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAvatarEmoji();
+  }
+
+  Future<void> _loadAvatarEmoji() async {
+    final prefs = await SharedPreferences.getInstance();
+    final emoji = prefs.getString(_kAvatarEmojiKey);
+    if (emoji != null && mounted) {
+      setState(() => _selectedAvatarEmoji = emoji);
+    }
+  }
+
+  Future<void> _saveAvatarEmoji(String emoji) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kAvatarEmojiKey, emoji);
+    setState(() => _selectedAvatarEmoji = emoji);
+  }
+
+  void _showAvatarOptions() {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Pick from Gallery'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickAvatar();
+              },
+            ),
+            ListTile(
+              leading: const Text('👩', style: TextStyle(fontSize: 24)),
+              title: const Text('Choose Avatar'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showEmojiAvatarPicker();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEmojiAvatarPicker() {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Choose Your Avatar',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 16),
+            GridView.count(
+              shrinkWrap: true,
+              crossAxisCount: 6,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+              children: _femaleAvatars.map((emoji) {
+                final isSelected = _selectedAvatarEmoji == emoji;
+                return GestureDetector(
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _saveAvatarEmoji(emoji);
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppColors.primaryLight
+                          : AppColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected
+                            ? AppColors.primary
+                            : AppColors.divider,
+                        width: isSelected ? 2 : 1,
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(emoji,
+                          style: const TextStyle(fontSize: 28)),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Future<void> _pickAvatar() async {
     final picked = await _picker.pickImage(
@@ -67,11 +181,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         );
       }
     }
-    // Fallback: emoji
+    // Emoji avatar (kullanıcının seçtiği veya stil tercihinden gelen)
+    final displayEmoji = _selectedAvatarEmoji ?? fallbackEmoji;
     return CircleAvatar(
       radius: 48,
       backgroundColor: AppColors.primaryLight,
-      child: Text(fallbackEmoji, style: const TextStyle(fontSize: 40)),
+      child: Text(displayEmoji, style: const TextStyle(fontSize: 40)),
     );
   }
 
@@ -201,7 +316,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             child: Column(
               children: [
                 GestureDetector(
-                  onTap: _pickAvatar,
+                  onTap: _showAvatarOptions,
                   child: Stack(
                     children: [
                       _buildAvatar(profile.stylePreference.icon),

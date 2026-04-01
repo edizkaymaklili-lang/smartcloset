@@ -30,10 +30,14 @@ class _CollectionDetailScreenState extends ConsumerState<CollectionDetailScreen>
 
     return collectionsAsync.when(
       data: (collections) {
-        final collection = collections.firstWhere(
-          (c) => c.id == widget.collectionId,
-          orElse: () => throw Exception('Collection not found'),
-        );
+        final matchIndex = collections.indexWhere((c) => c.id == widget.collectionId);
+        if (matchIndex == -1) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('Collection')),
+            body: const Center(child: Text('Collection not found.')),
+          );
+        }
+        final collection = collections[matchIndex];
 
         final collectionItems = allItems
             .where((item) => collection.itemIds.contains(item.id))

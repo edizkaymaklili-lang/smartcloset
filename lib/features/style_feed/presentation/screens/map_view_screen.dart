@@ -49,9 +49,33 @@ class _MapViewScreenState extends ConsumerState<MapViewScreen> {
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) return;
+        if (permission == LocationPermission.denied) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Location permission denied. Map shows default location.'),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+          return;
+        }
       }
-      if (permission == LocationPermission.deniedForever) return;
+      if (permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Location permission permanently denied.'),
+              behavior: SnackBarBehavior.floating,
+              action: SnackBarAction(
+                label: 'Settings',
+                onPressed: Geolocator.openAppSettings,
+              ),
+            ),
+          );
+        }
+        return;
+      }
 
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(

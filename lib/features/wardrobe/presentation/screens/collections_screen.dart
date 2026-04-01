@@ -2,14 +2,42 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../services/tips_service.dart';
 import '../../domain/entities/wardrobe_collection.dart';
 import '../providers/collection_provider.dart';
 
-class CollectionsScreen extends ConsumerWidget {
+class CollectionsScreen extends ConsumerStatefulWidget {
   const CollectionsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CollectionsScreen> createState() => _CollectionsScreenState();
+}
+
+class _CollectionsScreenState extends ConsumerState<CollectionsScreen> {
+  bool _tipScheduled = false;
+
+  void _maybeShowTip(List collections) {
+    if (_tipScheduled || collections.isEmpty) return;
+    _tipScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      if (await TipsService.shouldShow('collections_longpress')) {
+        await TipsService.markShown('collections_longpress');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Long press a collection card to delete it · Tap the pencil icon to edit'),
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final collectionsAsync = ref.watch(collectionProvider);
 
     return Scaffold(
@@ -21,7 +49,9 @@ class CollectionsScreen extends ConsumerWidget {
         ),
       ),
       body: collectionsAsync.when(
-        data: (collections) => collections.isEmpty
+        data: (collections) {
+          _maybeShowTip(collections);
+          return collections.isEmpty
             ? _EmptyState(
                 onAdd: () => _showCreateCollectionDialog(context, ref),
               )
@@ -45,7 +75,8 @@ class CollectionsScreen extends ConsumerWidget {
                     onDelete: () => _confirmDelete(context, ref, collection),
                   );
                 },
-              ),
+              );
+        },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(child: Text('Error: $error')),
       ),

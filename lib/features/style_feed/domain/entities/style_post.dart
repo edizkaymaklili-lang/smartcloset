@@ -121,13 +121,15 @@ class StylePost extends Equatable {
       };
 
   factory StylePost.fromJson(Map<String, dynamic> json) => StylePost(
-        id: json['id'] as String,
-        userId: json['userId'] as String,
-        userDisplayName: json['userDisplayName'] as String,
+        id: json['id'] as String? ?? '',
+        userId: json['userId'] as String? ?? '',
+        userDisplayName: json['userDisplayName'] as String? ?? '',
         userAvatar: json['userAvatar'] as String?,
-        photoUrl: json['photoUrl'] as String,
+        photoUrl: json['photoUrl'] as String? ?? '',
         description: json['description'] as String?,
-        tags: List<String>.from(json['tags'] as List),
+        tags: json['tags'] != null
+            ? List<String>.from(json['tags'] as List)
+            : [],
         location: json['location'] != null
             ? PostLocation.fromJson(json['location'] as Map<String, dynamic>)
             : null,
@@ -135,10 +137,16 @@ class StylePost extends Equatable {
             ? WeatherSnapshot.fromJson(
                 json['weatherSnapshot'] as Map<String, dynamic>)
             : null,
-        likes: json['likes'] as int,
-        likedBy: List<String>.from(json['likedBy'] as List),
-        createdAt: (json['createdAt'] as Timestamp).toDate(),
-        updatedAt: (json['updatedAt'] as Timestamp).toDate(),
+        likes: (json['likes'] as num?)?.toInt() ?? 0,
+        likedBy: json['likedBy'] != null
+            ? List<String>.from(json['likedBy'] as List)
+            : [],
+        createdAt: json['createdAt'] != null
+            ? (json['createdAt'] as Timestamp).toDate()
+            : DateTime.now(),
+        updatedAt: json['updatedAt'] != null
+            ? (json['updatedAt'] as Timestamp).toDate()
+            : DateTime.now(),
       );
 
   StylePost copyWith({

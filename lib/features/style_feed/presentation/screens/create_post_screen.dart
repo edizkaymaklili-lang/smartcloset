@@ -1,6 +1,4 @@
-import 'dart:io';
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -86,7 +84,7 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
         source: source,
         maxWidth: 1080,
         maxHeight: 1920,
-        imageQuality: 85,
+        imageQuality: 80,
       );
 
       if (pickedFile != null) {
@@ -149,6 +147,18 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
 
   void _removeTag(String tag) {
     setState(() => _tags.remove(tag));
+  }
+
+  void _insertEmoji(String emoji) {
+    final ctrl = _descriptionController;
+    final text = ctrl.text;
+    final sel = ctrl.selection;
+    final pos = sel.isValid && sel.baseOffset >= 0 ? sel.baseOffset : text.length;
+    final newText = text.substring(0, pos) + emoji + text.substring(pos);
+    ctrl.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: pos + emoji.length),
+    );
   }
 
   Future<void> _submitPost() async {
@@ -322,6 +332,8 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 8),
+            _EmojiToolbar(onEmojiTap: _insertEmoji),
 
             const SizedBox(height: 24),
 
@@ -405,32 +417,32 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
                         ],
                       ),
                     ),
-                  RadioListTile<String>(
-                    title: const Text('Show exact location'),
-                    subtitle: const Text('Precise coordinates on map'),
-                    value: 'exact',
+                  RadioGroup<String>(
                     groupValue: _locationPrivacy,
                     onChanged: (value) =>
                         setState(() => _locationPrivacy = value!),
-                    dense: true,
-                  ),
-                  RadioListTile<String>(
-                    title: const Text('Show city only'),
-                    subtitle: const Text('General location'),
-                    value: 'city',
-                    groupValue: _locationPrivacy,
-                    onChanged: (value) =>
-                        setState(() => _locationPrivacy = value!),
-                    dense: true,
-                  ),
-                  RadioListTile<String>(
-                    title: const Text('Hide location'),
-                    subtitle: const Text('No location shown'),
-                    value: 'hidden',
-                    groupValue: _locationPrivacy,
-                    onChanged: (value) =>
-                        setState(() => _locationPrivacy = value!),
-                    dense: true,
+                    child: Column(
+                      children: const [
+                        RadioListTile<String>(
+                          title: Text('Show exact location'),
+                          subtitle: Text('Precise coordinates on map'),
+                          value: 'exact',
+                          dense: true,
+                        ),
+                        RadioListTile<String>(
+                          title: Text('Show city only'),
+                          subtitle: Text('General location'),
+                          value: 'city',
+                          dense: true,
+                        ),
+                        RadioListTile<String>(
+                          title: Text('Hide location'),
+                          subtitle: Text('No location shown'),
+                          value: 'hidden',
+                          dense: true,
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -438,6 +450,49 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
 
             const SizedBox(height: 32),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EmojiToolbar extends StatelessWidget {
+  final ValueChanged<String> onEmojiTap;
+  const _EmojiToolbar({required this.onEmojiTap});
+
+  static const _emojis = [
+    // Giysi & aksesuar
+    '👗', '👠', '👟', '👜', '👒', '🧣', '🧥', '🧢', '💄', '💅',
+    '💎', '👑', '🕶️', '💍', '⌚',
+    // Stil vibe
+    '✨', '🔥', '💫', '🌟', '💕', '😍', '🤩',
+    // Ortam & durum
+    '💼', '🌴', '🎉', '💪', '🍽️', '🎓',
+    // Mevsim
+    '☀️', '🌸', '🍂', '❄️', '🌈',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 44,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: _emojis.length,
+        separatorBuilder: (_, i) => const SizedBox(width: 4),
+        itemBuilder: (_, i) => GestureDetector(
+          onTap: () => onEmojiTap(_emojis[i]),
+          child: Container(
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.divider),
+            ),
+            child: Text(_emojis[i], style: const TextStyle(fontSize: 20)),
+          ),
         ),
       ),
     );

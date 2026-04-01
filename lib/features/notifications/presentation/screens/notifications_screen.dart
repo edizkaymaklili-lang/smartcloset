@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../domain/entities/notification.dart';
 import '../providers/notification_provider.dart';
+import '../../../style_feed/presentation/providers/style_feed_provider.dart';
 
 class NotificationsScreen extends ConsumerWidget {
   const NotificationsScreen({super.key});
@@ -108,6 +109,8 @@ class NotificationsScreen extends ConsumerWidget {
         ],
       ),
       body: notificationsAsync.when(
+        skipLoadingOnReload: true,
+        skipLoadingOnRefresh: true,
         data: (notifications) {
           if (notifications.isEmpty) {
             return Center(
@@ -151,10 +154,20 @@ class NotificationsScreen extends ConsumerWidget {
                           .markAsRead(notification.id);
                     }
 
-                    // Navigate based on notification type
-                    if (notification.postId != null) {
-                      // Navigate to post detail (you'll need to implement this)
-                      // context.push('/style-feed/post/${notification.postId}');
+                    // Navigate to the related post if available
+                    if (notification.postId != null && context.mounted) {
+                      final repo = ref.read(styleFeedRepositoryProvider);
+                      final post = await repo.getPostById(notification.postId!);
+                      if (post != null && context.mounted) {
+                        context.push('/style-feed/post', extra: post);
+                      } else if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('This post is no longer available'),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
                     }
                   },
                   onDelete: () async {
@@ -168,7 +181,7 @@ class NotificationsScreen extends ConsumerWidget {
             ),
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const _NotificationsSkeleton(),
         error: (error, stack) => Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -183,6 +196,12 @@ class NotificationsScreen extends ConsumerWidget {
                 error.toString(),
                 style: const TextStyle(color: AppColors.textSecondary),
                 textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () => ref.invalidate(notificationsStreamProvider),
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
               ),
             ],
           ),
@@ -310,6 +329,87 @@ class _NotificationTile extends StatelessWidget {
             : AppColors.primaryLight.withValues(alpha: 0.1),
         onTap: onTap,
       ),
+    );
+  }
+}
+
+class _NotificationsSkeleton extends StatelessWidget {
+  const _NotificationsSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: 6,
+      separatorBuilder: (_, _) => const Divider(height: 1),
+      itemBuilder: (_, _) => const _SkeletonTile(),
+    );
+  }
+}
+
+class _SkeletonTile extends StatefulWidget {
+  const _SkeletonTile();
+
+  @override
+  State<_SkeletonTile> createState() => _SkeletonTileState();
+}
+
+class _SkeletonTileState extends State<_SkeletonTile>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+    _animation = Tween<double>(begin: 0.3, end: 0.7).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, _) {
+        final color = Colors.grey.withValues(alpha: _animation.value);
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              // Avatar skeleton
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+              ),
+              const SizedBox(width: 12),
+              // Text lines skeleton
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(height: 14, width: double.infinity, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4))),
+                    const SizedBox(height: 6),
+                    Container(height: 12, width: 120, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4))),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

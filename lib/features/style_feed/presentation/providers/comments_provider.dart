@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/comment.dart';
-import '../../data/style_feed_repository.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../notifications/data/repositories/notification_repository.dart';
 import '../../../notifications/domain/entities/notification.dart';
@@ -69,6 +68,22 @@ final deleteCommentProvider = Provider((ref) {
     await repository.deleteComment(postId, commentId, currentUserId);
 
     // Invalidate to refresh comments
+    ref.invalidate(commentsProvider(postId));
+  };
+});
+
+/// Edit a comment's text (owner only)
+final editCommentProvider = Provider((ref) {
+  return ({
+    required String postId,
+    required String commentId,
+    required String newText,
+  }) async {
+    final repository = ref.read(styleFeedRepositoryProvider);
+    final currentUserId = ref.read(currentUserIdProvider);
+
+    await repository.editComment(postId, commentId, currentUserId, newText);
+
     ref.invalidate(commentsProvider(postId));
   };
 });

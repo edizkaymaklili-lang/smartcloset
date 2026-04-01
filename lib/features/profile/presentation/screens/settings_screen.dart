@@ -10,6 +10,7 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/profile_provider.dart';
 import '../../../../services/settings_service.dart';
 import '../../../../services/background_removal_service.dart';
+import '../../../../services/gemini_service.dart';
 import '../../../../core/constants/world_cities.dart';
 import '../../../../core/legal/legal_texts.dart';
 import '../../../../core/theme/theme_provider.dart';
@@ -25,11 +26,13 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _settingsService = SettingsService();
   final _backgroundRemovalService = BackgroundRemovalService();
+  final _geminiService = GeminiService();
 
   bool _notificationsEnabled = true;
   bool _locationEnabled = true;
   bool _backgroundRemovalEnabled = false;
   String _removeBgApiKey = '';
+  String _geminiApiKey = '';
   String _appVersion = '';
 
   @override
@@ -53,6 +56,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final location = await _settingsService.getLocationEnabled();
     final bgRemoval = await _settingsService.getBackgroundRemovalEnabled();
     final apiKey = await _settingsService.getRemoveBgApiKey();
+    final geminiKey = await _settingsService.getGeminiApiKey();
 
     if (mounted) {
       setState(() {
@@ -60,6 +64,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         _locationEnabled = location;
         _backgroundRemovalEnabled = bgRemoval;
         _removeBgApiKey = apiKey;
+        _geminiApiKey = geminiKey;
       });
     }
   }
@@ -177,10 +182,109 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           _backgroundRemovalEnabled = true;
                         });
                         await _settingsService.setBackgroundRemovalEnabled(true);
+                        if (!context.mounted) return;
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text('API key validated successfully!'),
+                            backgroundColor: AppColors.success,
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Invalid API key. Please check and try again.'),
+                            backgroundColor: AppColors.error,
+                          ),
+                        );
+                      }
+                    },
+              child: isValidating
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showGeminiApiKeyDialog() async {
+    final controller = TextEditingController(text: _geminiApiKey);
+    bool isValidating = false;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Google Gemini API Key'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Gemini AI will automatically detect the name, color and category of clothing items you add.',
+                style: TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Get your free API key:',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                '1. Visit aistudio.google.com\n2. Sign in with your Google account\n3. Click "Get API key" → "Create API key"',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                decoration: const InputDecoration(
+                  labelText: 'API Key',
+                  border: OutlineInputBorder(),
+                  hintText: 'Paste your Gemini API key here',
+                ),
+                maxLines: 2,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            if (_geminiApiKey.isNotEmpty)
+              TextButton(
+                onPressed: () async {
+                  await _settingsService.setGeminiApiKey('');
+                  setState(() => _geminiApiKey = '');
+                  if (context.mounted) Navigator.pop(context);
+                },
+                style: TextButton.styleFrom(foregroundColor: AppColors.error),
+                child: const Text('Remove'),
+              ),
+            TextButton(
+              onPressed: isValidating
+                  ? null
+                  : () async {
+                      final key = controller.text.trim();
+                      if (key.isEmpty) return;
+                      setDialogState(() => isValidating = true);
+                      final ok = await _geminiService.validateApiKey(key);
+                      setDialogState(() => isValidating = false);
+                      if (!context.mounted) return;
+                      if (ok) {
+                        await _settingsService.setGeminiApiKey(key);
+                        setState(() => _geminiApiKey = key);
+                        if (!context.mounted) return;
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Gemini API key saved!'),
                             backgroundColor: AppColors.success,
                           ),
                         );
@@ -575,6 +679,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
           const Divider(height: 32),
 
+          // AI Features Section
+          _SectionHeader(title: 'AI Features'),
+          _SettingsTile(
+            icon: Icons.auto_awesome_outlined,
+            title: 'Google Gemini AI',
+            subtitle: _geminiApiKey.isEmpty
+                ? 'Set API key to enable smart item detection'
+                : 'Active · Auto-detects name, color & category',
+            trailing: _geminiApiKey.isNotEmpty
+                ? const Icon(Icons.check_circle, color: AppColors.success, size: 20)
+                : const Icon(Icons.chevron_right),
+            onTap: _showGeminiApiKeyDialog,
+          ),
+
+          const Divider(height: 32),
+
           // Privacy & Data Section
           _SectionHeader(title: 'Privacy & Data'),
           _SettingsTile(
@@ -840,6 +960,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         errorMsg = null;
                       });
 
+                      // Capture before async gap
+                      final messenger = ScaffoldMessenger.of(context);
+
                       final error = await ref
                           .read(authProvider.notifier)
                           .changePassword(
@@ -851,7 +974,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
                       if (error == null) {
                         Navigator.pop(ctx);
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        messenger.showSnackBar(
                           const SnackBar(
                             content: Text('Password changed successfully.'),
                             backgroundColor: AppColors.success,

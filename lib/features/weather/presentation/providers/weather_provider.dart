@@ -18,13 +18,12 @@ class WeatherNotifier extends AsyncNotifier<WeatherData> {
     // Keep weather data cached - don't dispose when navigating away
     ref.keepAlive();
 
-    final profile = ref.watch(profileProvider);
-    final api = ref.read(weatherApiProvider);
+    // Only re-fetch when city changes, not on every profile update
+    final city = ref.watch(profileProvider.select((p) => p.city));
 
-    // Don't auto-detect location on page load to improve performance
-    // Users can manually trigger location detection via refresh button
-    debugPrint('Fetching weather for: ${profile.city}');
-    return api.getCurrentWeather(city: profile.city);
+    final api = ref.read(weatherApiProvider);
+    debugPrint('Fetching weather for: $city');
+    return api.getCurrentWeather(city: city);
   }
 
   Future<void> refresh({String? city, bool detectLocation = false}) async {

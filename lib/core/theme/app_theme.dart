@@ -21,7 +21,9 @@ class AppTheme {
         error: AppColors.error,
       ),
       scaffoldBackgroundColor: AppColors.background,
-      textTheme: GoogleFonts.poppinsTextTheme(ThemeData.light().textTheme),
+      textTheme: GoogleFonts.poppinsTextTheme(ThemeData.light().textTheme).apply(
+        fontFamilyFallback: ['Noto Sans', 'sans-serif'],
+      ),
       appBarTheme: AppBarTheme(
         backgroundColor: AppColors.surface,
         foregroundColor: AppColors.textPrimary,
@@ -106,6 +108,7 @@ class AppTheme {
       textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme).apply(
         bodyColor: darkTextPrimary,
         displayColor: darkTextPrimary,
+        fontFamilyFallback: ['Noto Sans', 'sans-serif'],
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: darkSurface,

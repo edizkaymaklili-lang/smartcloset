@@ -50,8 +50,16 @@ class StorageService {
 
       if (kIsWeb) {
         // Web: imageFile is XFile
+        // xFile.path on web is a blob URL, not a file path — use mimeType or name instead.
         final xFile = imageFile as XFile;
-        extension = xFile.path.split('.').last.toLowerCase();
+        final mimeType = xFile.mimeType ?? '';
+        if (mimeType.contains('/')) {
+          // e.g. 'image/png' → 'png', 'image/jpeg' → 'jpeg'
+          final raw = mimeType.split('/').last.toLowerCase();
+          extension = raw == 'jpeg' ? 'jpg' : raw;
+        } else {
+          extension = xFile.name.split('.').last.toLowerCase();
+        }
         final ref = _storage.ref().child('wardrobe/$userId/$itemId.$extension');
 
         // Upload bytes for web

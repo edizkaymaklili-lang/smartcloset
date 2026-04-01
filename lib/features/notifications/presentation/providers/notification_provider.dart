@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../main.dart' show firebaseAvailableProvider;
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/repositories/notification_repository.dart';
 import '../../domain/entities/notification.dart';
@@ -9,20 +10,31 @@ final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {
 
 /// Stream provider for user's notifications
 final notificationsStreamProvider = StreamProvider<List<AppNotification>>((ref) {
-  final userId = ref.watch(authProvider).userId;
-  if (userId == null) {
-    return Stream.value([]);
-  }
+  // Don't open Firestore until Firebase is confirmed ready
+  final firebaseReady = ref.watch(firebaseAvailableProvider);
+  if (!firebaseReady) return Stream.value([]);
+
+  // Only watch userId — avoids stream restart on every auth status change (loading→authenticated)
+  final userId = ref.watch(authProvider.select((s) => s.userId));
+  if (userId == null) return Stream.value([]);
+
   final repository = ref.watch(notificationRepositoryProvider);
-  return repository.getUserNotificationsStream(userId);
+  return repository.getUserNotificationsStream(userId).timeout(
+    const Duration(seconds: 10),
+    onTimeout: (sink) => sink.addError(
+      Exception('Could not load notifications. Check your connection.'),
+    ),
+  );
 });
 
 /// Stream provider for unread notification count
 final unreadNotificationCountProvider = StreamProvider<int>((ref) {
-  final userId = ref.watch(authProvider).userId;
-  if (userId == null) {
-    return Stream.value(0);
-  }
+  final firebaseReady = ref.watch(firebaseAvailableProvider);
+  if (!firebaseReady) return Stream.value(0);
+
+  final userId = ref.watch(authProvider.select((s) => s.userId));
+  if (userId == null) return Stream.value(0);
+
   final repository = ref.watch(notificationRepositoryProvider);
   return repository.getUnreadCountStream(userId);
 });

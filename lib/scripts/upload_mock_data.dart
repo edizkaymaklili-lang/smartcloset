@@ -1,39 +1,40 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import '../firebase_options.dart';
 
 /// Script to upload mock data to Firestore
 /// Run with: dart run lib/scripts/upload_mock_data.dart
 void main() async {
-  print('🚀 Starting mock data upload...\n');
+  debugPrint('🚀 Starting mock data upload...\n');
 
   // Initialize Firebase
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  print('✅ Firebase initialized\n');
+  debugPrint('✅ Firebase initialized\n');
 
   final firestore = FirebaseFirestore.instance;
 
   try {
     // 1. Create mock users
-    print('📝 Creating mock users...');
+    debugPrint('📝 Creating mock users...');
     await createMockUsers(firestore);
-    print('✅ Mock users created\n');
+    debugPrint('✅ Mock users created\n');
 
     // 2. Create mock wardrobe items
-    print('👔 Creating mock wardrobe items...');
+    debugPrint('👔 Creating mock wardrobe items...');
     await createMockWardrobeItems(firestore);
-    print('✅ Mock wardrobe items created\n');
+    debugPrint('✅ Mock wardrobe items created\n');
 
     // 3. Create mock recommendations
-    print('💡 Creating mock recommendations...');
+    debugPrint('💡 Creating mock recommendations...');
     await createMockRecommendations(firestore);
-    print('✅ Mock recommendations created\n');
+    debugPrint('✅ Mock recommendations created\n');
 
-    print('🎉 All mock data uploaded successfully!');
+    debugPrint('🎉 All mock data uploaded successfully!');
   } catch (e) {
-    print('❌ Error: $e');
+    debugPrint('❌ Error: $e');
   }
 }
 
@@ -88,7 +89,7 @@ Future<void> createMockUsers(FirebaseFirestore firestore) async {
 
   for (var user in users) {
     await firestore.collection('users').doc(user['userId'] as String).set(user);
-    print('  ✓ Created user: ${user['displayName']}');
+    debugPrint('  ✓ Created user: ${user['displayName']}');
   }
 }
 
@@ -275,7 +276,7 @@ Future<void> createMockWardrobeItems(FirebaseFirestore firestore) async {
         .collection('wardrobe')
         .doc(item['id'] as String)
         .set(item);
-    print('  ✓ Created wardrobe item: ${item['name']}');
+    debugPrint('  ✓ Created wardrobe item: ${item['name']}');
   }
 }
 
@@ -406,6 +407,6 @@ Future<void> createMockRecommendations(FirebaseFirestore firestore) async {
         .collection('recommendations')
         .doc(rec['id'] as String)
         .set(rec);
-    print('  ✓ Created recommendation: ${rec['id']}');
+    debugPrint('  ✓ Created recommendation: ${rec['id']}');
   }
 }
