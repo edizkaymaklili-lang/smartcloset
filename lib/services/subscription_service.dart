@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,8 +15,35 @@ class SubscriptionService {
   bool _isSubscribed = false;
   bool get isSubscribed => _isSubscribed;
 
+  ProductDetails? _product;
+  ProductDetails? get product => _product;
+
   // On web, subscriptions are not supported — grant full access
   bool get isAvailable => !kIsWeb;
+
+  /// Fetches the localized subscription price string from the store
+  /// (e.g. "€10.00", "$10.99"). Falls back to "€10" when the product
+  /// cannot be loaded (e.g. on web or before the IAP is approved).
+  Future<String> getPriceString() async {
+    if (kIsWeb) return '€10';
+    try {
+      final response = await _iap.queryProductDetails({_productId});
+      if (response.productDetails.isNotEmpty) {
+        _product = response.productDetails.first;
+        return _product!.price;
+      }
+    } catch (e) {
+      debugPrint('Price fetch error: $e');
+    }
+    return '€10';
+  }
+
+  /// Re-syncs entitlements with the App Store. Returns the resulting
+  /// subscription status so the UI can react to a successful restore.
+  Future<bool> restorePurchases() async {
+    await _restorePurchases();
+    return _isSubscribed;
+  }
 
   Future<void> initialize() async {
     if (kIsWeb) {
