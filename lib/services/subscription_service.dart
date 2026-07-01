@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,6 +9,7 @@ class SubscriptionService {
   static const String _productId = 'smart_closet_monthly';
   static const String _prefKey = 'subscription_active';
   static const String _trialStartKey = 'trial_start_date';
+  static const String _trialFieldName = 'trialStartDate';
   static const int _trialDays = 7;
 
   final InAppPurchase _iap = InAppPurchase.instance;
@@ -68,11 +71,10 @@ class SubscriptionService {
     final prefs = await SharedPreferences.getInstance();
     _isSubscribed = prefs.getBool(_prefKey) ?? false;
 
-    // Check trial period
+    // Check trial period (Firestore-backed so it survives reinstalls)
     if (!_isSubscribed) {
-      final trialStartStr = prefs.getString(_trialStartKey);
-      if (trialStartStr != null) {
-        final trialStart = DateTime.parse(trialStartStr);
+      final trialStart = await _effectiveTrialStart();
+      if (trialStart != null) {
         final daysSinceStart = DateTime.now().difference(trialStart).inDays;
         if (daysSinceStart < _trialDays) {
           _isSubscribed = true; // Still in trial
@@ -81,12 +83,74 @@ class SubscriptionService {
     }
   }
 
-  Future<void> startTrial() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.getString(_trialStartKey) == null) {
-      await prefs.setString(_trialStartKey, DateTime.now().toIso8601String());
-      _isSubscribed = true;
+  User? get _user => FirebaseAuth.instance.currentUser;
+
+  DocumentReference<Map<String, dynamic>>? get _userDoc {
+    final user = _user;
+    if (user == null) return null;
+    return FirebaseFirestore.instance.collection('users').doc(user.uid);
+  }
+
+  /// Reads the trial start date stored on the signed-in user's Firestore
+  /// document. This is the authoritative source, so a user cannot reset the
+  /// trial by reinstalling the app.
+  Future<DateTime?> _fetchRemoteTrialStart() async {
+    final doc = _userDoc;
+    if (doc == null) return null;
+    try {
+      final snapshot = await doc.get();
+      final value = snapshot.data()?[_trialFieldName];
+      if (value is Timestamp) return value.toDate();
+      if (value is String) return DateTime.tryParse(value);
+    } catch (e) {
+      debugPrint('Trial fetch error: $e');
     }
+    return null;
+  }
+
+  Future<void> _writeRemoteTrialStart(DateTime date) async {
+    final doc = _userDoc;
+    if (doc == null) return;
+    try {
+      await doc.set(
+        {_trialFieldName: Timestamp.fromDate(date)},
+        SetOptions(merge: true),
+      );
+    } catch (e) {
+      debugPrint('Trial write error: $e');
+    }
+  }
+
+  /// Resolves the effective trial start date. Firestore wins when the user is
+  /// signed in; otherwise the local cache is used. The two are kept in sync so
+  /// the trial is consistent across reinstalls and offline sessions.
+  Future<DateTime?> _effectiveTrialStart() async {
+    final prefs = await SharedPreferences.getInstance();
+    final remote = await _fetchRemoteTrialStart();
+    if (remote != null) {
+      await prefs.setString(_trialStartKey, remote.toIso8601String());
+      return remote;
+    }
+    final localStr = prefs.getString(_trialStartKey);
+    if (localStr != null) {
+      final local = DateTime.tryParse(localStr);
+      // Push a local-only trial up to Firestore so it can't be reset later.
+      if (local != null) await _writeRemoteTrialStart(local);
+      return local;
+    }
+    return null;
+  }
+
+  Future<void> startTrial() async {
+    final existing = await _effectiveTrialStart();
+    final start = existing ?? DateTime.now();
+    if (existing == null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_trialStartKey, start.toIso8601String());
+      await _writeRemoteTrialStart(start);
+    }
+    final daysSinceStart = DateTime.now().difference(start).inDays;
+    if (daysSinceStart < _trialDays) _isSubscribed = true;
   }
 
   int get trialDaysRemaining {
@@ -94,17 +158,14 @@ class SubscriptionService {
   }
 
   Future<int> getTrialDaysRemaining() async {
-    final prefs = await SharedPreferences.getInstance();
-    final trialStartStr = prefs.getString(_trialStartKey);
-    if (trialStartStr == null) return _trialDays;
-    final trialStart = DateTime.parse(trialStartStr);
+    final trialStart = await _effectiveTrialStart();
+    if (trialStart == null) return _trialDays;
     final daysPassed = DateTime.now().difference(trialStart).inDays;
     return (_trialDays - daysPassed).clamp(0, _trialDays);
   }
 
   Future<bool> hasTrialStarted() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_trialStartKey) != null;
+    return await _effectiveTrialStart() != null;
   }
 
   Future<void> _restorePurchases() async {

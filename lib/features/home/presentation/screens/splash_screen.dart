@@ -72,9 +72,21 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
         await subService.initialize();
         if (!mounted) return;
         if (subService.isSubscribed) {
+          // Active subscriber or still within the free trial.
           context.go('/recommendations');
         } else {
-          context.go('/paywall');
+          final trialStarted = await subService.hasTrialStarted();
+          if (!mounted) return;
+          if (!trialStarted) {
+            // First time here: silently start the 7-day free trial (no
+            // payment or card required) and go straight into the app.
+            await subService.startTrial();
+            if (!mounted) return;
+            context.go('/recommendations');
+          } else {
+            // Trial was already used and has expired: require subscription.
+            context.go('/paywall');
+          }
         }
       }
     } else {

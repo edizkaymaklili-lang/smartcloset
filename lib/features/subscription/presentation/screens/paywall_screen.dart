@@ -30,10 +30,15 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
   // Localized price string from the store, defaults until loaded.
   String _price = '€10';
 
+  // Whether the free trial has already been used (and thus expired by the
+  // time this screen is shown). When true, the trial can no longer be started.
+  bool _trialUsed = false;
+
   @override
   void initState() {
     super.initState();
     _loadPrice();
+    _loadTrialState();
   }
 
   Future<void> _loadPrice() async {
@@ -42,13 +47,28 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
     if (mounted) setState(() => _price = price);
   }
 
+  Future<void> _loadTrialState() async {
+    final service = ref.read(subscriptionServiceProvider);
+    final used = await service.hasTrialStarted();
+    if (mounted) setState(() => _trialUsed = used);
+  }
+
   Future<void> _startTrial() async {
     setState(() => _loading = true);
     final service = ref.read(subscriptionServiceProvider);
     await service.startTrial();
     if (!mounted) return;
     setState(() => _loading = false);
-    widget.onSubscribed();
+    // Only enter the app if the trial was actually granted. If it was already
+    // used, startTrial() is a no-op and access must not be granted for free.
+    if (service.isSubscribed) {
+      widget.onSubscribed();
+    } else {
+      setState(() => _trialUsed = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Your free trial has ended. Please subscribe to continue.')),
+      );
+    }
   }
 
   Future<void> _subscribe() async {
@@ -193,21 +213,26 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 6),
-                      const Text(
-                        '7 days free, then renews monthly. Cancel anytime.',
-                        style: TextStyle(fontSize: 13, color: Colors.white70),
+                      Text(
+                        _trialUsed
+                            ? 'Your 7-day free trial has ended. Subscribe to continue.'
+                            : '7 days free, then renews monthly. Cancel anytime.',
+                        style: const TextStyle(fontSize: 13, color: Colors.white70),
                         textAlign: TextAlign.center,
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 24),
-                // Start trial button
+                // Primary action: start the free trial (first-time users) or
+                // subscribe (once the trial has been used up).
                 SizedBox(
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: _loading ? null : _startTrial,
+                    onPressed: _loading
+                        ? null
+                        : (_trialUsed ? _subscribe : _startTrial),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
                       foregroundColor: const Color(0xFFE91E8C),
@@ -217,9 +242,11 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
                     ),
                     child: _loading
                         ? const CircularProgressIndicator()
-                        : const Text(
-                            'Start 7-Day Free Trial',
-                            style: TextStyle(
+                        : Text(
+                            _trialUsed
+                                ? 'Subscribe — $_price/month'
+                                : 'Start 7-Day Free Trial',
+                            style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
                             ),
@@ -227,14 +254,16 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                // Subscribe directly
-                TextButton(
-                  onPressed: _loading ? null : _subscribe,
-                  child: Text(
-                    'Subscribe now — $_price/month',
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                // Secondary subscribe link (hidden once trial is used, since the
+                // primary button already subscribes in that state).
+                if (!_trialUsed)
+                  TextButton(
+                    onPressed: _loading ? null : _subscribe,
+                    child: Text(
+                      'Subscribe now — $_price/month',
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                    ),
                   ),
-                ),
                 // Restore purchases
                 TextButton(
                   onPressed: _loading ? null : _restore,
