@@ -58,12 +58,11 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyDLapgbcVq35Diga84GcpwWL8IYxEa2ZTg',
-    appId: '1:203315352795:android:024fe14b6ffac7f60268fe',
+    appId: '1:203315352795:android:f37be4d46bf755070268fe',
     messagingSenderId: '203315352795',
     projectId: 'smartcloset-95789',
     storageBucket: 'smartcloset-95789.firebasestorage.app',
   );
-
   /// iOS Firebase yapılandırması.
   ///
   /// ⚠️  KULLANICI AKSİYONU GEREKLİ — aşağıdaki adımları izleyin:
@@ -76,14 +75,14 @@ class DefaultFirebaseOptions {
   ///      - GOOGLE_APP_ID    → appId
   ///      - CLIENT_ID        → iosClientId
   ///      - GCG_SENDER_ID    → messagingSenderId (zaten: '203315352795')
+
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'YOUR_IOS_API_KEY',
-    appId: 'YOUR_IOS_APP_ID',
+    apiKey: 'AIzaSyCyoieET80PIAPt_hrlOoiZEhnKfStf-QU',
+    appId: '1:203315352795:ios:9b79ec7a636df0dc0268fe',
     messagingSenderId: '203315352795',
     projectId: 'smartcloset-95789',
     storageBucket: 'smartcloset-95789.firebasestorage.app',
-    iosClientId: 'YOUR_IOS_CLIENT_ID',
+    iosClientId: '203315352795-ikfsq641mpl6nvsapn5td8ruc00999j9.apps.googleusercontent.com',
     iosBundleId: 'com.stilasist.stilAsist',
   );
-
 }

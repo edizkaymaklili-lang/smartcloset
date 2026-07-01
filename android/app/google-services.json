@@ -29,6 +29,13 @@
             {
               "client_id": "203315352795-fumqqtja1caricbjjdc44pekddb4iv5c.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "203315352795-ikfsq641mpl6nvsapn5td8ruc00999j9.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.stilasist.stilAsist"
+              }
             }
           ]
         }
@@ -58,6 +65,13 @@
             {
               "client_id": "203315352795-fumqqtja1caricbjjdc44pekddb4iv5c.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "203315352795-ikfsq641mpl6nvsapn5td8ruc00999j9.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.stilasist.stilAsist"
+              }
             }
           ]
         }
