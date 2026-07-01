@@ -7,6 +7,11 @@ import 'package:google_sign_in/google_sign_in.dart';
 import '../../../../main.dart' show firebaseAvailableProvider;
 import '../../domain/entities/auth_state.dart';
 
+/// App Review demo account. This single address is allowed to bypass the
+/// email-verification gate so App Store reviewers can sign in without needing
+/// to receive a verification email. Access still requires the password.
+const String kReviewAccountEmail = 'appreview@smartcloset.app';
+
 final authProvider = NotifierProvider<AuthNotifier, AuthState>(() {
   return AuthNotifier();
 });

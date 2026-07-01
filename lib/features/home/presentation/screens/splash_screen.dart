@@ -64,7 +64,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
     final authState = ref.read(authProvider);
     if (authState.isAuthenticated) {
-      if (!authState.emailVerified && authState.email != null) {
+      if (!authState.emailVerified &&
+          authState.email != null &&
+          authState.email != kReviewAccountEmail) {
         context.go('/verify-email');
       } else {
         // Check subscription status

@@ -155,6 +155,17 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
             padding: const EdgeInsets.all(24),
             child: Column(
               children: [
+                // Close button — only shown when the paywall was pushed (e.g.
+                // opened from Settings), so it can be dismissed. When it is the
+                // root screen (trial expired) there is nothing to pop.
+                if (Navigator.of(context).canPop())
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ),
                 const SizedBox(height: 16),
                 const Icon(Icons.checkroom, size: 72, color: Colors.white),
                 const SizedBox(height: 20),
@@ -242,13 +253,17 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
                     ),
                     child: _loading
                         ? const CircularProgressIndicator()
-                        : Text(
-                            _trialUsed
-                                ? 'Subscribe — $_price/month'
-                                : 'Start 7-Day Free Trial',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                        : FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              _trialUsed
+                                  ? 'Subscribe — $_price/month'
+                                  : 'Start 7-Day Free Trial',
+                              maxLines: 1,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                   ),

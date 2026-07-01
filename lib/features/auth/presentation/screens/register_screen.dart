@@ -115,8 +115,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     ref.listen(authProvider, (prev, next) {
       if (next.isAuthenticated) {
         // Check if email verification is required
-        if (next.emailVerified || next.email == null) {
-          // Email is verified OR it's a non-email provider (Google)
+        if (next.emailVerified ||
+            next.email == null ||
+            next.email == kReviewAccountEmail) {
+          // Email is verified OR non-email provider (Google) OR review account
           context.go('/onboarding');
         } else {
           // Email not verified, redirect to verification screen

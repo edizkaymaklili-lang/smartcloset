@@ -139,7 +139,13 @@ class OccasionOutfitTab extends StatelessWidget {
             runSpacing: 8,
             children: outfit.accessories.map((acc) {
               return Chip(
-                label: Text(acc, style: const TextStyle(fontSize: 12)),
+                label: Text(
+                  acc,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
                 backgroundColor: AppColors.sunny.withValues(alpha: 0.12),
                 side: BorderSide(color: AppColors.sunny.withValues(alpha: 0.3)),
               );

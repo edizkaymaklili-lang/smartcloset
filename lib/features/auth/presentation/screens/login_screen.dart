@@ -127,7 +127,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (authState.isAuthenticated) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) {
-          if (!authState.emailVerified && authState.email != null) {
+          if (!authState.emailVerified &&
+              authState.email != null &&
+              authState.email != kReviewAccountEmail) {
             context.go('/verify-email');
           } else {
             context.go('/recommendations');
@@ -137,7 +139,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
     ref.listen(authProvider, (prev, next) {
       if (next.isAuthenticated) {
-        if (!next.emailVerified && next.email != null) {
+        if (!next.emailVerified &&
+            next.email != null &&
+            next.email != kReviewAccountEmail) {
           context.go('/verify-email');
         } else {
           context.go('/recommendations');
