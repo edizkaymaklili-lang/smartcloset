@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../domain/entities/auth_state.dart';
 import '../providers/auth_provider.dart';
@@ -36,6 +37,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   void _handleGoogleLogin() {
     ref.read(authProvider.notifier).signInWithGoogle();
+  }
+
+  void _handleAppleLogin() {
+    ref.read(authProvider.notifier).signInWithApple();
   }
 
   void _showForgotPassword() {
@@ -399,6 +404,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // ─── Apple Button ───
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: SignInWithAppleButton(
+                          onPressed: authState.status == AuthStatus.loading
+                              ? () {}
+                              : _handleAppleLogin,
                         ),
                       ),
 

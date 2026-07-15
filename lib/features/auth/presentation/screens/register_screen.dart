@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/legal/legal_texts.dart';
 import '../../domain/entities/auth_state.dart';
@@ -106,6 +107,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   void _handleGoogleLogin() {
     ref.read(authProvider.notifier).signInWithGoogle();
+  }
+
+  void _handleAppleLogin() {
+    ref.read(authProvider.notifier).signInWithApple();
   }
 
   @override
@@ -448,6 +453,19 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // ─── Apple Button ───
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: SignInWithAppleButton(
+                      onPressed: authState.status == AuthStatus.loading
+                          ? () {}
+                          : _handleAppleLogin,
                     ),
                   ),
 
