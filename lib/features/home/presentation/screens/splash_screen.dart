@@ -5,7 +5,6 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../main.dart' show firebaseAvailableProvider;
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../weather/presentation/providers/weather_provider.dart';
-import '../../../../services/subscription_service.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -69,27 +68,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
           authState.email != kReviewAccountEmail) {
         context.go('/verify-email');
       } else {
-        // Check subscription status
-        final subService = SubscriptionService();
-        await subService.initialize();
-        if (!mounted) return;
-        if (subService.isSubscribed) {
-          // Active subscriber or still within the free trial.
-          context.go('/recommendations');
-        } else {
-          final trialStarted = await subService.hasTrialStarted();
-          if (!mounted) return;
-          if (!trialStarted) {
-            // First time here: silently start the 7-day free trial (no
-            // payment or card required) and go straight into the app.
-            await subService.startTrial();
-            if (!mounted) return;
-            context.go('/recommendations');
-          } else {
-            // Trial was already used and has expired: require subscription.
-            context.go('/paywall');
-          }
-        }
+        context.go('/recommendations');
       }
     } else {
       context.go('/login');

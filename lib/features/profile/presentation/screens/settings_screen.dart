@@ -695,17 +695,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
           const Divider(height: 32),
 
-          // Subscription Section
-          _SectionHeader(title: 'Subscription'),
-          _SettingsTile(
-            icon: Icons.workspace_premium_outlined,
-            title: 'Smart Closet Premium',
-            subtitle: 'View plan, price & manage subscription',
-            onTap: () => context.push('/paywall'),
-          ),
-
-          const Divider(height: 32),
-
           // Privacy & Data Section
           _SectionHeader(title: 'Privacy & Data'),
           _SettingsTile(
