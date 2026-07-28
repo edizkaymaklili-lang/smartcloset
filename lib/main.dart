@@ -4,6 +4,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
@@ -73,6 +74,10 @@ Future<void> _initFirebaseInBackground(ProviderContainer container) async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+
+    if (!kIsWeb) {
+      await GoogleSignIn.instance.initialize();
+    }
 
     // Update firebase flag so providers know Firebase is ready
     container.read(firebaseAvailableProvider.notifier).setReady();

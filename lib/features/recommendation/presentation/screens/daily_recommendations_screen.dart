@@ -214,6 +214,8 @@ class _DailyRecommendationsScreenState
               ),
             TabBar(
               controller: _tabController,
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
               labelColor: AppColors.primary,
               unselectedLabelColor: AppColors.textSecondary,
               indicatorColor: AppColors.primary,

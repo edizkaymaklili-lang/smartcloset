@@ -28,7 +28,6 @@ import '../../features/style_feed/domain/entities/style_post.dart';
 import '../../features/notifications/presentation/screens/notifications_screen.dart';
 import '../../screens/upload_mock_data_screen.dart';
 import '../../test_firebase_connection.dart';
-import '../../features/subscription/presentation/screens/paywall_screen.dart';
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'rootNavigator');
 final GlobalKey<NavigatorState> _shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'shellNavigator');
@@ -57,12 +56,6 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/onboarding',
       builder: (context, state) => const OnboardingScreen(),
-    ),
-    GoRoute(
-      path: '/paywall',
-      builder: (context, state) => PaywallScreen(
-        onSubscribed: () => context.go('/recommendations'),
-      ),
     ),
     ShellRoute(
       navigatorKey: _shellNavigatorKey,
@@ -138,6 +131,10 @@ final appRouter = GoRouter(
         ),
         GoRoute(
           path: '/style-feed/post',
+          redirect: (context, state) {
+            if (state.extra is! StylePost) return '/style-feed';
+            return null;
+          },
           builder: (context, state) => PostDetailScreen(
             post: state.extra as StylePost,
           ),

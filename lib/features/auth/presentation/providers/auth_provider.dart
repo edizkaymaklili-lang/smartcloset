@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -189,50 +188,17 @@ class AuthNotifier extends Notifier<AuthState> {
         }
         return;
       } else {
-        // Mobile/Desktop platform: Use google_sign_in package
-        final googleSignIn = GoogleSignIn.instance;
+        // Mobile: use google_sign_in v7 authenticate() for native Google sign-in sheet
+        final googleUser = await GoogleSignIn.instance.authenticate();
 
-        // google_sign_in v7: event-based authentication
-        final completer = Completer<GoogleSignInAccount?>();
-        StreamSubscription<GoogleSignInAuthenticationEvent>? sub;
-
-        sub = googleSignIn.authenticationEvents.listen(
-          (event) {
-            switch (event) {
-              case GoogleSignInAuthenticationEventSignIn(:final user):
-                if (!completer.isCompleted) completer.complete(user);
-              case GoogleSignInAuthenticationEventSignOut():
-                if (!completer.isCompleted) completer.complete(null);
-            }
-            sub?.cancel();
-          },
-          onError: (error) {
-            if (!completer.isCompleted) completer.completeError(error);
-            sub?.cancel();
-          },
-        );
-
-        // Trigger Google authentication
-        await googleSignIn.authenticate();
-
-        final googleUser = await completer.future.timeout(
-          const Duration(seconds: 30),
-          onTimeout: () => null,
-        );
-
-        if (googleUser == null) {
-          state = state.copyWith(status: AuthStatus.unauthenticated);
-          return;
-        }
-
-        // v7: authentication is a sync getter with idToken only
         final idToken = googleUser.authentication.idToken;
-        final credential = GoogleAuthProvider.credential(idToken: idToken);
+        final credential = GoogleAuthProvider.credential(
+          idToken: idToken,
+        );
 
         final userCredential =
             await FirebaseAuth.instance.signInWithCredential(credential);
 
-        // Create/update user profile in Firestore
         if (userCredential.user != null) {
           await _createUserProfile(userCredential.user!);
         }
@@ -244,10 +210,24 @@ class AuthNotifier extends Notifier<AuthState> {
           status: AuthStatus.authenticated,
         );
       }
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        state = state.copyWith(status: AuthStatus.unauthenticated);
+        return;
+      }
+      state = state.copyWith(
+        status: AuthStatus.error,
+        errorMessage: 'Sign in failed. Please try again.',
+      );
+    } on FirebaseAuthException catch (e) {
+      state = state.copyWith(
+        status: AuthStatus.error,
+        errorMessage: _mapAuthError(e.code),
+      );
     } catch (e) {
       state = state.copyWith(
         status: AuthStatus.error,
-        errorMessage: 'Google sign in failed: ${e.toString()}',
+        errorMessage: 'Sign in failed. Please try again.',
       );
     }
   }
@@ -266,9 +246,18 @@ class AuthNotifier extends Notifier<AuthState> {
         nonce: nonce,
       );
 
+      if (appleCredential.identityToken == null) {
+        state = state.copyWith(
+          status: AuthStatus.error,
+          errorMessage: 'Apple sign in failed: no identity token received.',
+        );
+        return;
+      }
+
       final oauthCredential = OAuthProvider('apple.com').credential(
         idToken: appleCredential.identityToken,
         rawNonce: rawNonce,
+        accessToken: appleCredential.authorizationCode,
       );
 
       final userCredential =
@@ -302,12 +291,17 @@ class AuthNotifier extends Notifier<AuthState> {
       }
       state = state.copyWith(
         status: AuthStatus.error,
-        errorMessage: 'Apple sign in failed: ${e.message}',
+        errorMessage: 'Sign in failed. Please try again.',
+      );
+    } on FirebaseAuthException catch (e) {
+      state = state.copyWith(
+        status: AuthStatus.error,
+        errorMessage: _mapAuthError(e.code),
       );
     } catch (e) {
       state = state.copyWith(
         status: AuthStatus.error,
-        errorMessage: 'Apple sign in failed: ${e.toString()}',
+        errorMessage: 'Sign in failed. Please try again.',
       );
     }
   }
@@ -460,7 +454,9 @@ class AuthNotifier extends Notifier<AuthState> {
       'invalid-email' => 'Invalid email address.',
       'too-many-requests' => 'Too many attempts. Please try again later.',
       'user-disabled' => 'This account has been disabled.',
-      _ => 'An error occurred: $code',
+      'invalid-credential' => 'Sign in failed. Please try again.',
+      'account-exists-with-different-credential' => 'An account already exists with this email using a different sign-in method.',
+      _ => 'An error occurred. Please try again.',
     };
   }
 }

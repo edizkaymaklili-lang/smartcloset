@@ -36,6 +36,19 @@
 	<string>We need access to your photo library so you can choose photos of your clothing items and outfits.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>We need permission to save styled images and outfits to your photo library.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.203315352795-ikfsq641mpl6nvsapn5td8ruc00999j9</string>
+			</array>
+		</dict>
+	</array>
+	<key>GIDClientID</key>
+	<string>203315352795-ikfsq641mpl6nvsapn5td8ruc00999j9.apps.googleusercontent.com</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>UIApplicationSceneManifest</key>

@@ -8,6 +8,14 @@ import '../../domain/entities/comment.dart';
 import '../providers/style_feed_provider.dart';
 import '../providers/comments_provider.dart';
 
+const _reportReasons = [
+  'Inappropriate content',
+  'Spam',
+  'Harassment',
+  'Misinformation',
+  'Other',
+];
+
 class PostDetailScreen extends ConsumerWidget {
   final StylePost post;
 
@@ -43,15 +51,19 @@ class PostDetailScreen extends ConsumerWidget {
                 .read(styleFeedProvider.notifier)
                 .toggleSave(post.id),
           ),
-          if (post.userId == currentUserId)
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, color: Colors.white),
-              onSelected: (value) {
-                if (value == 'delete') {
-                  _showDeleteConfirmation(context, ref);
-                }
-              },
-              itemBuilder: (context) => [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            onSelected: (value) {
+              if (value == 'delete') {
+                _showDeleteConfirmation(context, ref);
+              } else if (value == 'report') {
+                _showReportPostDialog(context, ref);
+              } else if (value == 'block') {
+                _showBlockUserDialog(context, ref);
+              }
+            },
+            itemBuilder: (context) => [
+              if (post.userId == currentUserId)
                 const PopupMenuItem(
                   value: 'delete',
                   child: Row(
@@ -62,8 +74,30 @@ class PostDetailScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
+              if (post.userId != currentUserId) ...[
+                const PopupMenuItem(
+                  value: 'report',
+                  child: Row(
+                    children: [
+                      Icon(Icons.flag_outlined, color: AppColors.error),
+                      SizedBox(width: 8),
+                      Text('Report Post'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'block',
+                  child: Row(
+                    children: [
+                      Icon(Icons.block, color: AppColors.error),
+                      SizedBox(width: 8),
+                      Text('Block User'),
+                    ],
+                  ),
+                ),
               ],
-            ),
+            ],
+          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -333,6 +367,81 @@ class PostDetailScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  void _showReportPostDialog(BuildContext context, WidgetRef ref) {
+    showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Report Post'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Why are you reporting this post?'),
+            const SizedBox(height: 8),
+            ..._reportReasons.map((reason) => ListTile(
+                  title: Text(reason),
+                  onTap: () => Navigator.pop(ctx, reason),
+                  dense: true,
+                )),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    ).then((reason) async {
+      if (reason == null || !context.mounted) return;
+      try {
+        await ref.read(reportPostProvider)(postId: post.id, reason: reason);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Report submitted. Thank you.')),
+          );
+        }
+      } catch (_) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to submit report. Please try again.')),
+          );
+        }
+      }
+    });
+  }
+
+  void _showBlockUserDialog(BuildContext context, WidgetRef ref) {
+    showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Block User'),
+        content: Text(
+          'Block ${post.userDisplayName}? Their posts will be removed from your feed.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('Block'),
+          ),
+        ],
+      ),
+    ).then((confirmed) async {
+      if (confirmed != true || !context.mounted) return;
+      await ref.read(styleFeedProvider.notifier).blockUser(post.userId);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${post.userDisplayName} has been blocked.')),
+        );
+        Navigator.pop(context); // Return to feed
+      }
+    });
   }
 
   void _showDeleteConfirmation(BuildContext context, WidgetRef ref) {
@@ -632,6 +741,15 @@ class _CommentItem extends ConsumerWidget {
                         constraints: const BoxConstraints(),
                       ),
                     ],
+                    if (!isOwner)
+                      IconButton(
+                        onPressed: () => _showReportCommentDialog(context, ref, postId, comment.id),
+                        icon: const Icon(Icons.flag_outlined, size: 18),
+                        color: AppColors.textHint,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        tooltip: 'Report comment',
+                      ),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -679,6 +797,59 @@ class _CommentItem extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Shows a dialog to report a comment. Called from _CommentItem.
+void _showReportCommentDialog(
+  BuildContext context,
+  WidgetRef ref,
+  String postId,
+  String commentId,
+) {
+  showDialog<String>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Report Comment'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('Why are you reporting this comment?'),
+          const SizedBox(height: 8),
+          ..._reportReasons.map((reason) => ListTile(
+                title: Text(reason),
+                onTap: () => Navigator.pop(ctx, reason),
+                dense: true,
+              )),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancel'),
+        ),
+      ],
+    ),
+  ).then((reason) async {
+    if (reason == null || !context.mounted) return;
+    try {
+      await ref.read(reportCommentProvider)(
+        postId: postId,
+        commentId: commentId,
+        reason: reason,
+      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Report submitted. Thank you.')),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to submit report. Please try again.')),
+        );
+      }
+    }
+  });
 }
 
 /// Shows a dialog to edit a comment. Called from _CommentItem.

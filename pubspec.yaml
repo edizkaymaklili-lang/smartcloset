@@ -1,7 +1,7 @@
 name: stil_asist
 description: "Weather-based style assistant for women"
 publish_to: 'none'
-version: 1.0.0+9
+version: 1.0.0+11
 
 environment:
   sdk: ^3.10.1
@@ -44,7 +44,6 @@ dependencies:
   share_plus: ^12.0.1
   firebase_analytics: ^11.6.0
   in_app_review: ^2.0.11
-  in_app_purchase: ^3.2.0
   sign_in_with_apple: ^6.1.2
   crypto: ^3.0.6
   flutter_cache_manager: ^3.4.1

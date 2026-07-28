@@ -1,8 +1,10 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/legal/legal_texts.dart';
 import '../../domain/entities/auth_state.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/animated_fashion_avatar.dart';
@@ -25,6 +27,50 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  void _showLegalDoc(String title, String body) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 8, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(title,
+                        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Text(body, style: const TextStyle(fontSize: 13, height: 1.6)),
+              ),
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _handleLogin() {
@@ -169,20 +215,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
         ),
         child: SafeArea(
-          child: Center(
+          child: Column(
+            children: [
+              // ─── Scrollable top: avatar + form ───
+              Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(horizontal: 32),
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const SizedBox(height: 16),
-
-                      // ─── Animated Avatar ───
-                      const AnimatedFashionAvatar(height: 260),
-
-                      const SizedBox(height: 16),
-
-                      // ─── Title ───
+                      const SizedBox(height: 8),
+                      const AnimatedFashionAvatar(height: 130),
+                      const SizedBox(height: 8),
                       Text(
                         'Smart Closet',
                         style: Theme.of(context).textTheme.headlineMedium?.copyWith(
@@ -198,15 +241,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               color: AppColors.textSecondary,
                             ),
                       ),
-
-                      const SizedBox(height: 32),
-
-                      // ─── Form ───
+                      const SizedBox(height: 16),
                       Form(
                         key: _formKey,
                         child: Column(
                           children: [
-                            // Email
                             TextFormField(
                               controller: _emailController,
                               keyboardType: TextInputType.emailAddress,
@@ -221,16 +260,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 ),
                               ),
                               validator: (val) {
-                                if (val == null || val.isEmpty) {
-                                  return 'Email is required';
-                                }
+                                if (val == null || val.isEmpty) return 'Email is required';
                                 if (!val.contains('@')) return 'Enter valid email';
                                 return null;
                               },
                             ),
                             const SizedBox(height: 12),
-
-                            // Password
                             TextFormField(
                               controller: _passwordController,
                               obscureText: _obscurePassword,
@@ -252,9 +287,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 ),
                               ),
                               validator: (val) {
-                                if (val == null || val.isEmpty) {
-                                  return 'Password is required';
-                                }
+                                if (val == null || val.isEmpty) return 'Password is required';
                                 if (val.length < 6) return 'At least 6 characters';
                                 return null;
                               },
@@ -262,15 +295,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ],
                         ),
                       ),
-
-                      // ─── Forgot Password ───
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
                           onPressed: _showForgotPassword,
                           style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 0, vertical: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
                             minimumSize: Size.zero,
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
@@ -284,11 +314,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                         ),
                       ),
-
-                      // Error message
                       if (authState.status == AuthStatus.error &&
                           authState.errorMessage != null) ...[
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 8),
                         Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
@@ -297,162 +325,140 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.error_outline,
-                                  color: AppColors.error, size: 18),
+                              const Icon(Icons.error_outline, color: AppColors.error, size: 18),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
                                   authState.errorMessage!,
-                                  style: const TextStyle(
-                                      color: AppColors.error, fontSize: 13),
+                                  style: const TextStyle(color: AppColors.error, fontSize: 13),
+                                  maxLines: 3,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
                           ),
                         ),
                       ],
-
-                      const SizedBox(height: 20),
-
-                      // ─── Login Button ───
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: ElevatedButton(
-                          onPressed: authState.status == AuthStatus.loading
-                              ? null
-                              : _handleLogin,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            elevation: 4,
-                          ),
-                          child: authState.status == AuthStatus.loading
-                              ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Text(
-                                  'Sign In',
-                                  style: TextStyle(
-                                      fontSize: 16, fontWeight: FontWeight.w600),
-                                ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // ─── Divider ───
-                      Row(
-                        children: [
-                          Expanded(
-                              child: Divider(
-                                  color: AppColors.textHint.withValues(alpha: 0.5))),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: Text(
-                              'or',
-                              style: TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                              child: Divider(
-                                  color: AppColors.textHint.withValues(alpha: 0.5))),
-                        ],
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // ─── Google Button ───
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: OutlinedButton.icon(
-                          onPressed: authState.status == AuthStatus.loading
-                              ? null
-                              : _handleGoogleLogin,
-                          icon: Image.network(
-                            'https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg',
-                            width: 20,
-                            height: 20,
-                            errorBuilder: (_, _, _) =>
-                                const Icon(Icons.g_mobiledata, size: 24),
-                          ),
-                          label: const Text(
-                            'Sign in with Google',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: AppColors.textPrimary,
-                            side: BorderSide(
-                                color: AppColors.divider.withValues(alpha: 0.8)),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 12),
-
-                      // ─── Apple Button ───
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: SignInWithAppleButton(
-                          onPressed: authState.status == AuthStatus.loading
-                              ? () {}
-                              : _handleAppleLogin,
-                        ),
-                      ),
-
-                      const SizedBox(height: 24),
-
-                      // ─── Register Link ───
-                      Wrap(
-                        alignment: WrapAlignment.center,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text(
-                            'Don\'t have an account? ',
-                            style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 14,
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: () => context.go('/register'),
-                            child: Text(
-                              'Sign Up',
-                              style: TextStyle(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 8),
                     ],
                   ),
                 ),
               ),
+
+              // ─── Fixed bottom: buttons always visible ───
+              Padding(
+                padding: const EdgeInsets.fromLTRB(32, 0, 32, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ElevatedButton(
+                      onPressed: authState.status == AuthStatus.loading ? null : _handleLogin,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(double.infinity, 50),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 4,
+                      ),
+                      child: authState.status == AuthStatus.loading
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : const Text('Sign In', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(child: Divider(color: AppColors.textHint.withValues(alpha: 0.5))),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Text('or', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                        ),
+                        Expanded(child: Divider(color: AppColors.textHint.withValues(alpha: 0.5))),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: authState.status == AuthStatus.loading ? null : _handleGoogleLogin,
+                      icon: Image.network(
+                        'https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg',
+                        width: 20,
+                        height: 20,
+                        errorBuilder: (_, _, _) => const Icon(Icons.g_mobiledata, size: 24),
+                      ),
+                      label: const Text('Sign in with Google', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: AppColors.textPrimary,
+                        minimumSize: const Size(double.infinity, 50),
+                        side: BorderSide(color: AppColors.divider.withValues(alpha: 0.8)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: SignInWithAppleButton(
+                        onPressed: authState.status == AuthStatus.loading ? () {} : _handleAppleLogin,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: RichText(
+                        textAlign: TextAlign.center,
+                        text: TextSpan(
+                          style: TextStyle(fontSize: 11, color: AppColors.textHint, height: 1.5),
+                          children: [
+                            const TextSpan(text: 'By signing in you agree to our '),
+                            TextSpan(
+                              text: 'Terms of Service',
+                              style: const TextStyle(
+                                color: AppColors.primary,
+                                decoration: TextDecoration.underline,
+                              ),
+                              recognizer: TapGestureRecognizer()
+                                ..onTap = () => _showLegalDoc(
+                                      LegalTexts.termsOfServiceTitle,
+                                      LegalTexts.termsOfService,
+                                    ),
+                            ),
+                            const TextSpan(text: ' and '),
+                            TextSpan(
+                              text: 'Privacy Policy',
+                              style: const TextStyle(
+                                color: AppColors.primary,
+                                decoration: TextDecoration.underline,
+                              ),
+                              recognizer: TapGestureRecognizer()
+                                ..onTap = () => _showLegalDoc(
+                                      LegalTexts.privacyPolicyTitle,
+                                      LegalTexts.privacyPolicy,
+                                    ),
+                            ),
+                            const TextSpan(text: '.'),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      children: [
+                        Text('Don\'t have an account? ', style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
+                        GestureDetector(
+                          onTap: () => context.go('/register'),
+                          child: Text('Sign Up', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600, fontSize: 14)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

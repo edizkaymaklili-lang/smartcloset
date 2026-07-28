@@ -9,6 +9,92 @@ import '../../domain/entities/style_post.dart';
 import '../providers/style_feed_provider.dart';
 import '../../../profile/presentation/providers/follow_provider.dart';
 
+void _showReportDialog(BuildContext context, WidgetRef ref, String postId) {
+  final reasons = [
+    'Inappropriate content',
+    'Spam',
+    'Harassment',
+    'Misinformation',
+    'Other',
+  ];
+  showDialog<String>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Report Post'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('Why are you reporting this post?'),
+          const SizedBox(height: 8),
+          ...reasons.map((reason) => ListTile(
+                title: Text(reason),
+                onTap: () => Navigator.pop(ctx, reason),
+                dense: true,
+              )),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancel'),
+        ),
+      ],
+    ),
+  ).then((reason) async {
+    if (reason == null || !context.mounted) return;
+    try {
+      await ref.read(reportPostProvider)(postId: postId, reason: reason);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Report submitted. Thank you.')),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to submit report. Please try again.')),
+        );
+      }
+    }
+  });
+}
+
+void _showBlockConfirmation(
+  BuildContext context,
+  WidgetRef ref,
+  String userId,
+  String displayName,
+) {
+  showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Block User'),
+      content: Text(
+        'Block $displayName? Their posts will be removed from your feed and they won\'t be able to interact with you.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          style: TextButton.styleFrom(foregroundColor: AppColors.error),
+          child: const Text('Block'),
+        ),
+      ],
+    ),
+  ).then((confirmed) async {
+    if (confirmed != true || !context.mounted) return;
+    await ref.read(styleFeedProvider.notifier).blockUser(userId);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$displayName has been blocked.')),
+      );
+    }
+  });
+}
+
 class StylePostCard extends ConsumerWidget {
   final StylePost post;
   final VoidCallback? onTap;
@@ -100,11 +186,14 @@ class StylePostCard extends ConsumerWidget {
                               color: AppColors.textSecondary,
                             ),
                             const SizedBox(width: 4),
-                            Text(
-                              post.location!.city,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textSecondary,
+                            Flexible(
+                              child: Text(
+                                post.location!.city,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.textSecondary,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -121,6 +210,40 @@ class StylePostCard extends ConsumerWidget {
                     ],
                   ),
                 ),
+                // More options button (only show if not own post)
+                if (!isOwnPost)
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert, color: AppColors.textSecondary, size: 20),
+                    onSelected: (value) {
+                      if (value == 'report') {
+                        _showReportDialog(context, ref, post.id);
+                      } else if (value == 'block') {
+                        _showBlockConfirmation(context, ref, post.userId, post.userDisplayName);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'report',
+                        child: Row(
+                          children: [
+                            Icon(Icons.flag_outlined, color: AppColors.error),
+                            SizedBox(width: 8),
+                            Text('Report Post'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'block',
+                        child: Row(
+                          children: [
+                            Icon(Icons.block, color: AppColors.error),
+                            SizedBox(width: 8),
+                            Text('Block User'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 // Follow button (only show if not own post)
                 if (!isOwnPost)
                   TextButton(

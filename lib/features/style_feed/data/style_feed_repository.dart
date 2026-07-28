@@ -500,4 +500,73 @@ class StyleFeedRepository {
       throw Exception('Failed to toggle comment like: ${e.toString()}');
     }
   }
+
+  /// Report a post for objectionable content
+  Future<void> reportPost({
+    required String reporterId,
+    required String postId,
+    required String reason,
+  }) async {
+    await _firestore.collection('reports').add({
+      'type': 'post',
+      'postId': postId,
+      'reporterId': reporterId,
+      'reason': reason,
+      'createdAt': FieldValue.serverTimestamp(),
+      'status': 'pending',
+    });
+  }
+
+  /// Report a comment for objectionable content
+  Future<void> reportComment({
+    required String reporterId,
+    required String postId,
+    required String commentId,
+    required String reason,
+  }) async {
+    await _firestore.collection('reports').add({
+      'type': 'comment',
+      'postId': postId,
+      'commentId': commentId,
+      'reporterId': reporterId,
+      'reason': reason,
+      'createdAt': FieldValue.serverTimestamp(),
+      'status': 'pending',
+    });
+  }
+
+  /// Block a user — stores the block and notifies the developer via reports
+  Future<void> blockUser({
+    required String blockerId,
+    required String blockedUserId,
+  }) async {
+    await Future.wait([
+      _firestore
+          .collection('blocked_users')
+          .doc(blockerId)
+          .collection('blocks')
+          .doc(blockedUserId)
+          .set({
+        'blockedAt': FieldValue.serverTimestamp(),
+        'blockedUserId': blockedUserId,
+      }),
+      _firestore.collection('reports').add({
+        'type': 'block',
+        'blockerId': blockerId,
+        'blockedUserId': blockedUserId,
+        'createdAt': FieldValue.serverTimestamp(),
+        'status': 'pending',
+      }),
+    ]);
+  }
+
+  /// Fetch the set of user IDs that [userId] has blocked
+  Future<Set<String>> fetchBlockedUserIds(String userId) async {
+    final snapshot = await _firestore
+        .collection('blocked_users')
+        .doc(userId)
+        .collection('blocks')
+        .get();
+    return snapshot.docs.map((doc) => doc.id).toSet();
+  }
 }

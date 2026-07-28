@@ -22,6 +22,7 @@ class StyleFeedState {
   final FeedMode mode;
   final DocumentSnapshot? lastDocument;
   final Set<String> savedPostIds;
+  final Set<String> blockedUserIds;
 
   const StyleFeedState({
     this.posts = const [],
@@ -31,6 +32,7 @@ class StyleFeedState {
     this.mode = FeedMode.forYou,
     this.lastDocument,
     this.savedPostIds = const {},
+    this.blockedUserIds = const {},
   });
 
   StyleFeedState copyWith({
@@ -42,6 +44,7 @@ class StyleFeedState {
     FeedMode? mode,
     DocumentSnapshot? lastDocument,
     Set<String>? savedPostIds,
+    Set<String>? blockedUserIds,
   }) =>
       StyleFeedState(
         posts: posts ?? this.posts,
@@ -51,6 +54,7 @@ class StyleFeedState {
         mode: mode ?? this.mode,
         lastDocument: lastDocument ?? this.lastDocument,
         savedPostIds: savedPostIds ?? this.savedPostIds,
+        blockedUserIds: blockedUserIds ?? this.blockedUserIds,
       );
 }
 
@@ -88,8 +92,8 @@ class StyleFeedNotifier extends Notifier<StyleFeedState> {
     _locationService = ref.read(locationServiceProvider);
     _currentUserId = ref.read(currentUserIdProvider);
 
-    // Load saved posts in background
     _loadSavedPosts();
+    _loadBlockedUsers();
 
     return const StyleFeedState();
   }
@@ -102,6 +106,33 @@ class StyleFeedNotifier extends Notifier<StyleFeedState> {
       state = state.copyWith(savedPostIds: savedIds);
     } catch (e) {
       // Failed to load saved posts, continue without them
+    }
+  }
+
+  /// Load the IDs of users that the current user has blocked
+  Future<void> _loadBlockedUsers() async {
+    try {
+      final blocked = await _repository.fetchBlockedUserIds(_currentUserId);
+      state = state.copyWith(blockedUserIds: blocked);
+    } catch (e) {
+      // Continue without block list
+    }
+  }
+
+  /// Block a user: removes their posts from the feed immediately and persists the block
+  Future<void> blockUser(String blockedUserId) async {
+    // Update state immediately
+    final newBlocked = Set<String>.from(state.blockedUserIds)..add(blockedUserId);
+    final filtered = state.posts.where((p) => p.userId != blockedUserId).toList();
+    state = state.copyWith(blockedUserIds: newBlocked, posts: filtered);
+
+    try {
+      await _repository.blockUser(
+        blockerId: _currentUserId,
+        blockedUserId: blockedUserId,
+      );
+    } catch (e) {
+      state = state.copyWith(errorMessage: 'Failed to block user');
     }
   }
 
@@ -127,7 +158,9 @@ class StyleFeedNotifier extends Notifier<StyleFeedState> {
         }
       }
 
-      final posts = await _fetchPostsByMode(newMode);
+      final posts = (await _fetchPostsByMode(newMode))
+          .where((p) => !state.blockedUserIds.contains(p.userId))
+          .toList();
       state = state.copyWith(
         posts: posts,
         isLoading: false,
@@ -148,7 +181,9 @@ class StyleFeedNotifier extends Notifier<StyleFeedState> {
     state = state.copyWith(isLoading: true);
 
     try {
-      final newPosts = await _fetchPostsByMode(state.mode);
+      final newPosts = (await _fetchPostsByMode(state.mode))
+          .where((p) => !state.blockedUserIds.contains(p.userId))
+          .toList();
       state = state.copyWith(
         posts: [...state.posts, ...newPosts],
         isLoading: false,
@@ -324,4 +359,20 @@ class StyleFeedNotifier extends Notifier<StyleFeedState> {
 final styleFeedProvider =
     NotifierProvider<StyleFeedNotifier, StyleFeedState>(() {
   return StyleFeedNotifier();
+});
+
+/// Report a post
+final reportPostProvider = Provider<Future<void> Function({required String postId, required String reason})>((ref) {
+  final repo = ref.read(styleFeedRepositoryProvider);
+  final currentUserId = ref.read(currentUserIdProvider);
+  return ({required String postId, required String reason}) =>
+      repo.reportPost(reporterId: currentUserId, postId: postId, reason: reason);
+});
+
+/// Report a comment
+final reportCommentProvider = Provider<Future<void> Function({required String postId, required String commentId, required String reason})>((ref) {
+  final repo = ref.read(styleFeedRepositoryProvider);
+  final currentUserId = ref.read(currentUserIdProvider);
+  return ({required String postId, required String commentId, required String reason}) =>
+      repo.reportComment(reporterId: currentUserId, postId: postId, commentId: commentId, reason: reason);
 });
